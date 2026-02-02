@@ -1,6 +1,12 @@
 package com.example.yoyo_data.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.pojo.Comment;
+import com.example.yoyo_data.common.pojo.Post;
+import com.example.yoyo_data.mapper.CommentMapper;
+import com.example.yoyo_data.mapper.PostMapper;
 import com.example.yoyo_data.service.CommentService;
 import com.example.yoyo_data.utils.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -8,9 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -27,6 +30,12 @@ public class CommentServiceImpl implements CommentService {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
+    @Autowired
+    private CommentMapper commentMapper;
+
+    @Autowired
+    private PostMapper postMapper;
+
     /**
      * 创建评论
      *
@@ -36,42 +45,45 @@ public class CommentServiceImpl implements CommentService {
      * @return 创建结果
      */
     @Override
-    public Result<Map<String, Object>> createComment(Long postId, String token, Map<String, Object> params) {
-        // 模拟创建评论逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证参数
-        // 4. 保存评论信息到数据库
-        // 5. 更新帖子的评论数
-        // 6. 构建返回结果
-        
+    public Result<Comment> createComment(Long postId, String token, Map<String, Object> params) {
         if (token == null || !jwtUtils.validateToken(token)) {
             return Result.unauthorized("Token无效或已过期");
         }
 
-        // 从token中获取用户信息
-        String username = jwtUtils.getUsernameFromToken(token);
         Long userId = jwtUtils.getUserIdFromToken(token);
 
-        // 模拟创建成功
-        Map<String, Object> commentInfo = new HashMap<>();
-        commentInfo.put("id", 1L);
-        commentInfo.put("post_id", postId);
-        commentInfo.put("user_id", userId);
-        commentInfo.put("content", params.get("content"));
-        commentInfo.put("parent_id", params.get("parent_id"));
-        commentInfo.put("like_count", 0);
-        commentInfo.put("created_at", new Date());
+        // 验证帖子是否存在
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            return Result.error("帖子不存在");
+        }
 
-        // 模拟用户信息
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("id", userId);
-        userInfo.put("username", username);
-        userInfo.put("avatar_url", "https://example.com/avatar.jpg");
-        commentInfo.put("user", userInfo);
+        // 如果有父评论ID，验证父评论是否存在
+        Long parentId = null;
+        if (params.containsKey("parent_id") && params.get("parent_id") != null) {
+            parentId = Long.valueOf(params.get("parent_id").toString());
+            Comment parentComment = commentMapper.selectById(parentId);
+            if (parentComment == null) {
+                return Result.error("父评论不存在");
+            }
+        }
 
-        return Result.success(commentInfo);
+        Comment comment = Comment.builder()
+                .postId(postId)
+                .userId(userId)
+                .parentId(parentId)
+                .content((String) params.get("content"))
+                .likeCount(0)
+                .isDeleted(false)
+                .build();
+
+        commentMapper.insert(comment);
+
+        // 更新帖子的评论数
+        post.setCommentCount(post.getCommentCount() + 1);
+        postMapper.updateById(post);
+
+        return Result.success(comment);
     }
 
     /**
@@ -84,42 +96,21 @@ public class CommentServiceImpl implements CommentService {
      * @return 评论列表
      */
     @Override
-    public Result<Map<String, Object>> getCommentList(Long postId, Integer page, Integer size, String sort) {
-        // 模拟获取评论列表逻辑
-        // 实际项目中需要：
-        // 1. 验证帖子ID
-        // 2. 构建查询条件
-        // 3. 从数据库查询评论列表
-        // 4. 构建分页结果
-        
-        // 模拟评论列表
-        ArrayList<Map<String, Object>> items = new ArrayList<>();
-        for (int i = 1; i <= size; i++) {
-            Map<String, Object> comment = new HashMap<>();
-            comment.put("id", (long) ((page - 1) * size + i));
-            comment.put("post_id", postId);
-            comment.put("user_id", 1L);
-            comment.put("content", "这是一条评论" + i);
-            comment.put("like_count", 0);
-            comment.put("created_at", new Date());
-            
-            // 模拟用户信息
-            Map<String, Object> userInfo = new HashMap<>();
-            userInfo.put("id", 1L);
-            userInfo.put("username", "user123");
-            userInfo.put("avatar_url", "https://example.com/avatar.jpg");
-            comment.put("user", userInfo);
-            
-            items.add(comment);
+    public Result<Page<Comment>> getCommentList(Long postId, Integer page, Integer size, String sort) {
+        Page<Comment> pageParam = new Page<>(page, size);
+        LambdaQueryWrapper<Comment> queryWrapper = new LambdaQueryWrapper<>();
+
+        queryWrapper.eq(Comment::getPostId, postId)
+                .eq(Comment::getIsDeleted, false);
+
+        // 排序
+        if ("like_count".equals(sort)) {
+            queryWrapper.orderByDesc(Comment::getLikeCount);
+        } else {
+            queryWrapper.orderByDesc(Comment::getCreatedAt);
         }
 
-        // 构建分页结果
-        Map<String, Object> result = new HashMap<>();
-        result.put("total", 50);
-        result.put("page", page);
-        result.put("size", size);
-        result.put("items", items);
-
+        Page<Comment> result = commentMapper.selectPage(pageParam, queryWrapper);
         return Result.success(result);
     }
 
@@ -131,26 +122,33 @@ public class CommentServiceImpl implements CommentService {
      * @return 删除结果
      */
     @Override
-    public Result<Map<String, Object>> deleteComment(Long id, String token) {
-        // 模拟删除评论逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证评论ID
-        // 4. 检查用户是否有权限删除评论
-        // 5. 删除评论（或标记为删除）
-        // 6. 更新帖子的评论数
-        // 7. 构建返回结果
-        
+    public Result<Void> deleteComment(Long id, String token) {
         if (token == null || !jwtUtils.validateToken(token)) {
             return Result.unauthorized("Token无效或已过期");
         }
 
-        // 模拟删除成功
-        Map<String, Object> result = new HashMap<>();
-        result.put("id", id);
-        result.put("status", "deleted");
+        Long userId = jwtUtils.getUserIdFromToken(token);
+        Comment comment = commentMapper.selectById(id);
 
-        return Result.success(result);
+        if (comment == null) {
+            return Result.error("评论不存在");
+        }
+
+        if (!comment.getUserId().equals(userId)) {
+            return Result.error("无权限删除此评论");
+        }
+
+        // 软删除：标记为已删除
+        comment.setIsDeleted(true);
+        commentMapper.updateById(comment);
+
+        // 更新帖子的评论数
+        Post post = postMapper.selectById(comment.getPostId());
+        if (post != null) {
+            post.setCommentCount(Math.max(0, post.getCommentCount() - 1));
+            postMapper.updateById(post);
+        }
+
+        return Result.success(null);
     }
 }

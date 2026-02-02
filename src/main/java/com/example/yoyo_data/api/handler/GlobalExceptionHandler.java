@@ -36,7 +36,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleBusinessException(BusinessException e) {
         log.warn("业务异常: {}", e.getMessage());
-        return Result.builder()
+        return Result.<Void>builder()
                 .code(e.getCode())
                 .message(e.getMessage())
                 .timestamp(LocalDateTime.now())
@@ -53,7 +53,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleValidationException(ValidationException e) {
         log.warn("参数验证异常: {}", e.getMessage());
-        return Result.builder()
+        return Result.<Void>builder()
                 .code(e.getCode())
                 .message(e.getMessage())
                 .timestamp(LocalDateTime.now())
@@ -70,7 +70,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleSystemException(SystemException e) {
         log.error("系统异常", e);
-        return Result.builder()
+        return Result.<Void>builder()
                 .code(e.getCode())
                 .message(e.getMessage())
                 .timestamp(LocalDateTime.now())
@@ -86,12 +86,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
-        String message = e.getBindingResult()
-                .getFieldError()
-                .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse("参数验证失败");
+        String message;
+        if (e.getBindingResult().getFieldError() != null) {
+            message = e.getBindingResult().getFieldError().getField() + ": " + e.getBindingResult().getFieldError().getDefaultMessage();
+        } else {
+            message = "参数验证失败";
+        }
         log.warn("参数验证失败: {}", message);
-        return Result.builder()
+        return Result.<Void>builder()
                 .code(400)
                 .message(message)
                 .timestamp(LocalDateTime.now())
@@ -110,7 +112,7 @@ public class GlobalExceptionHandler {
         String message = String.format("参数类型错误: %s 应该是 %s 类型",
                 e.getName(), e.getRequiredType().getSimpleName());
         log.warn("参数类型错误: {}", message);
-        return Result.builder()
+        return Result.<Void>builder()
                 .code(400)
                 .message(message)
                 .timestamp(LocalDateTime.now())
@@ -127,7 +129,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public Result<Void> handleNoHandlerFound(NoHandlerFoundException e) {
         log.warn("请求路径不存在: {} {}", e.getHttpMethod(), e.getRequestURL());
-        return Result.builder()
+        return Result.<Void>builder()
                 .code(404)
                 .message("请求的资源不存在")
                 .timestamp(LocalDateTime.now())
@@ -144,7 +146,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception e) {
         log.error("未捕获的异常", e);
-        return Result.builder()
+        return Result.<Void>builder()
                 .code(500)
                 .message("系统内部错误，请稍后重试")
                 .timestamp(LocalDateTime.now())

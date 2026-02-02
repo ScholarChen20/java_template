@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.yoyo_data.cache.RedisService;
 import com.example.yoyo_data.mapper.UserMapper;
-import com.example.yoyo_data.pojo.Users;
+import com.example.yoyo_data.common.pojo.Users;
 import com.example.yoyo_data.service.LimiterService;
 import com.example.yoyo_data.utils.HashUtils;
 import com.example.yoyo_data.utils.RRateLimiterUtils;
@@ -61,11 +61,11 @@ public class LimiterServiceImpl extends ServiceImpl<UserMapper, Users>  implemen
                 .avatarUrl("https://avatars.githubusercontent.com/u/123456789?v=4")
                 .bio("这个人很懒")
                 .role("user")
-                .isActive(1)
+                .isActive(true)
                 .createdAt(LocalDateTime.now())
                 .build();
         // 3.1 哈希加密密码
-        newUser.setPassword(HashUtils.hashPassword(DEFAULT_PASSWORD));
+        newUser.setPasswordHash(HashUtils.hashPassword(DEFAULT_PASSWORD));
         // 3.2 插入数据库
         baseMapper.insert(newUser);
 

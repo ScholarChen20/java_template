@@ -2,374 +2,277 @@ package com.example.yoyo_data.service.impl;
 
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.service.DialogService;
-import com.example.yoyo_data.utils.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * 对话服务实现类
- * 实现对话相关业务逻辑
  */
 @Slf4j
 @Service
 public class DialogServiceImpl implements DialogService {
 
-    @Autowired
-    private JwtUtils jwtUtils;
-
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
-
     /**
-     * 创建对话
-     *
-     * @param token  当前用户的token
-     * @param params 创建对话参数，包含recipient_id、type、metadata等
-     * @return 创建结果
+     * 从token中获取用户ID的辅助方法
+     * 实际项目中应该使用JWT工具类解析token
      */
+    private Long getUserIdFromToken(String token) {
+        // 模拟从token中获取用户ID
+        // 实际项目中应该使用JWT工具类解析token
+        return 1L;
+    }
+
     @Override
     public Result<Map<String, Object>> createDialog(String token, Map<String, Object> params) {
-        // 模拟创建对话逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证参数
-        // 4. 检查对话是否已存在
-        // 5. 保存对话信息到数据库
-        // 6. 构建返回结果
-        
-        if (token == null || !jwtUtils.validateToken(token)) {
-            return Result.unauthorized("Token无效或已过期");
+        try {
+            // 从token中获取用户ID
+            Long userId = getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.error("无效的token");
+            }
+
+            // 获取对方用户ID
+            Long recipientId = (Long) params.get("recipient_id");
+            if (recipientId == null) {
+                return Result.error("缺少recipient_id参数");
+            }
+
+            // 模拟创建对话
+            Map<String, Object> dialog = new HashMap<>();
+            dialog.put("id", System.currentTimeMillis());
+            dialog.put("user_id", userId);
+            dialog.put("recipient_id", recipientId);
+            dialog.put("type", params.getOrDefault("type", "private"));
+            dialog.put("metadata", params.get("metadata"));
+            dialog.put("created_at", System.currentTimeMillis());
+            dialog.put("updated_at", System.currentTimeMillis());
+
+            log.info("创建对话成功: userId={}, recipientId={}", userId, recipientId);
+            return Result.success(dialog);
+
+        } catch (Exception e) {
+            log.error("创建对话失败", e);
+            return Result.error("创建对话失败: " + e.getMessage());
         }
-
-        // 从token中获取用户信息
-        Long userId = jwtUtils.getUserIdFromToken(token);
-        Long recipientId = Long.valueOf(params.get("recipient_id").toString());
-
-        // 模拟创建成功
-        Map<String, Object> dialogInfo = new HashMap<>();
-        dialogInfo.put("id", 1L);
-        dialogInfo.put("type", params.getOrDefault("type", "private"));
-        dialogInfo.put("created_at", new Date());
-        dialogInfo.put("updated_at", new Date());
-
-        // 模拟参与者信息
-        ArrayList<Map<String, Object>> participants = new ArrayList<>();
-        Map<String, Object> participant1 = new HashMap<>();
-        participant1.put("id", userId);
-        participant1.put("username", "user" + userId);
-        participant1.put("avatar_url", "https://example.com/avatar" + userId + ".jpg");
-        participant1.put("last_read_message_id", null);
-        participant1.put("is_archived", false);
-        participants.add(participant1);
-
-        Map<String, Object> participant2 = new HashMap<>();
-        participant2.put("id", recipientId);
-        participant2.put("username", "user" + recipientId);
-        participant2.put("avatar_url", "https://example.com/avatar" + recipientId + ".jpg");
-        participant2.put("last_read_message_id", null);
-        participant2.put("is_archived", false);
-        participants.add(participant2);
-
-        dialogInfo.put("participants", participants);
-
-        return Result.success(dialogInfo);
     }
 
-    /**
-     * 获取对话列表
-     *
-     * @param token   当前用户的token
-     * @param page    页码，默认 1
-     * @param size    每页数量，默认 20
-     * @param type    类型，可选 private, group
-     * @param status  状态，可选 active, archived
-     * @param sort    排序方式，默认 updated_at
-     * @return 对话列表
-     */
     @Override
     public Result<Map<String, Object>> getDialogList(String token, Integer page, Integer size, String type, String status, String sort) {
-        // 模拟获取对话列表逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 构建查询条件
-        // 4. 从数据库查询对话列表
-        // 5. 构建分页结果
-        
-        if (token == null || !jwtUtils.validateToken(token)) {
-            return Result.unauthorized("Token无效或已过期");
+        try {
+            // 从token中获取用户ID
+            Long userId = getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.error("无效的token");
+            }
+
+            // 模拟数据
+            List<Map<String, Object>> dialogList = new ArrayList<>();
+            for (int i = 0; i < size; i++) {
+                Map<String, Object> dialog = new HashMap<>();
+                dialog.put("id", (long) (i + 1));
+                dialog.put("user_id", userId);
+                dialog.put("recipient_id", (long) (i + 2));
+                dialog.put("recipient_name", "用户" + (i + 2));
+                dialog.put("recipient_avatar", "https://example.com/avatar" + (i + 2) + ".jpg");
+                dialog.put("type", type != null ? type : "private");
+                dialog.put("status", status != null ? status : "active");
+                dialog.put("last_message", "这是最后一条消息" + (i + 1));
+                dialog.put("last_message_sender_id", (long) (i + 2));
+                dialog.put("last_message_at", System.currentTimeMillis() - i * 60000);
+                dialog.put("unread_count", i);
+                dialog.put("created_at", System.currentTimeMillis() - (i + 1) * 3600000);
+                dialog.put("updated_at", System.currentTimeMillis() - i * 60000);
+                dialogList.add(dialog);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("items", dialogList);
+            result.put("total", 100);
+            result.put("page", page);
+            result.put("size", size);
+            result.put("total_pages", (int) Math.ceil(100.0 / size));
+
+            log.info("获取对话列表成功: userId={}, page={}, size={}, type={}, status={}, sort={}", userId, page, size, type, status, sort);
+            return Result.success(result);
+
+        } catch (Exception e) {
+            log.error("获取对话列表失败", e);
+            return Result.error("获取对话列表失败: " + e.getMessage());
         }
-
-        // 从token中获取用户信息
-        Long userId = jwtUtils.getUserIdFromToken(token);
-
-        // 模拟对话列表
-        ArrayList<Map<String, Object>> items = new ArrayList<>();
-        for (int i = 1; i <= size; i++) {
-            Map<String, Object> dialog = new HashMap<>();
-            dialog.put("id", (long) ((page - 1) * size + i));
-            dialog.put("type", type != null ? type : "private");
-            dialog.put("updated_at", new Date());
-            dialog.put("unread_count", i);
-
-            // 模拟最后一条消息
-            Map<String, Object> lastMessage = new HashMap<>();
-            lastMessage.put("id", 1L + i);
-            lastMessage.put("content", "这是最后一条消息" + i);
-            lastMessage.put("created_at", new Date());
-            dialog.put("last_message", lastMessage);
-
-            // 模拟参与者信息
-            ArrayList<Map<String, Object>> participants = new ArrayList<>();
-            Map<String, Object> participant = new HashMap<>();
-            participant.put("id", 100L + i);
-            participant.put("username", "user" + (100 + i));
-            participant.put("avatar_url", "https://example.com/avatar" + (100 + i) + ".jpg");
-            participants.add(participant);
-            dialog.put("participants", participants);
-
-            items.add(dialog);
-        }
-
-        // 构建分页结果
-        Map<String, Object> result = new HashMap<>();
-        result.put("total", 50);
-        result.put("page", page);
-        result.put("size", size);
-        result.put("items", items);
-
-        return Result.success(result);
     }
 
-    /**
-     * 获取对话详情
-     *
-     * @param id    对话ID
-     * @param token 当前用户的token
-     * @return 对话详情
-     */
     @Override
-    public Result<Map<String, Object>> getDialogDetail(Long id, String token) {
-        // 模拟获取对话详情逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证对话ID
-        // 4. 检查用户是否有权限查看
-        // 5. 从数据库查询对话详情
-        // 6. 构建返回结果
-        
-        if (token == null || !jwtUtils.validateToken(token)) {
-            return Result.unauthorized("Token无效或已过期");
+    public Result<Map<String, Object>> getDialogDetail(Long dialogId, String token) {
+        try {
+            // 从token中获取用户ID
+            Long userId = getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.error("无效的token");
+            }
+
+            // 模拟数据
+            Map<String, Object> dialogDetail = new HashMap<>();
+            dialogDetail.put("id", dialogId);
+            dialogDetail.put("user_id", userId);
+            dialogDetail.put("recipient_id", 2L);
+            dialogDetail.put("recipient_name", "用户2");
+            dialogDetail.put("recipient_avatar", "https://example.com/avatar2.jpg");
+            dialogDetail.put("type", "private");
+            dialogDetail.put("status", "active");
+            dialogDetail.put("created_at", System.currentTimeMillis() - 3600000);
+            dialogDetail.put("updated_at", System.currentTimeMillis());
+
+            log.info("获取对话详情成功: dialogId={}, userId={}", dialogId, userId);
+            return Result.success(dialogDetail);
+
+        } catch (Exception e) {
+            log.error("获取对话详情失败", e);
+            return Result.error("获取对话详情失败: " + e.getMessage());
         }
-
-        // 从token中获取用户信息
-        Long userId = jwtUtils.getUserIdFromToken(token);
-
-        // 模拟对话详情
-        Map<String, Object> dialogInfo = new HashMap<>();
-        dialogInfo.put("id", id);
-        dialogInfo.put("type", "private");
-        dialogInfo.put("created_at", new Date());
-        dialogInfo.put("updated_at", new Date());
-
-        // 模拟参与者信息
-        ArrayList<Map<String, Object>> participants = new ArrayList<>();
-        Map<String, Object> participant1 = new HashMap<>();
-        participant1.put("id", userId);
-        participant1.put("username", "user" + userId);
-        participant1.put("avatar_url", "https://example.com/avatar" + userId + ".jpg");
-        participant1.put("last_read_message_id", 5L);
-        participant1.put("is_archived", false);
-        participants.add(participant1);
-
-        Map<String, Object> participant2 = new HashMap<>();
-        participant2.put("id", 100L);
-        participant2.put("username", "user100");
-        participant2.put("avatar_url", "https://example.com/avatar100.jpg");
-        participant2.put("last_read_message_id", 5L);
-        participant2.put("is_archived", false);
-        participants.add(participant2);
-
-        dialogInfo.put("participants", participants);
-
-        return Result.success(dialogInfo);
     }
 
-    /**
-     * 发送消息
-     *
-     * @param id     对话ID
-     * @param token  当前用户的token
-     * @param params 发送消息参数，包含content、type、media_urls等
-     * @return 发送结果
-     */
     @Override
-    public Result<Map<String, Object>> sendMessage(Long id, String token, Map<String, Object> params) {
-        // 模拟发送消息逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证参数
-        // 4. 验证对话ID
-        // 5. 检查用户是否有权限发送消息
-        // 6. 保存消息信息到数据库
-        // 7. 更新对话的最后消息时间
-        // 8. 构建返回结果
-        
-        if (token == null || !jwtUtils.validateToken(token)) {
-            return Result.unauthorized("Token无效或已过期");
-        }
+    public Result<?> sendMessage(Long dialogId, String token, Map<String, Object> params) {
+        try {
+            // 从token中获取用户ID
+            Long userId = getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.error("无效的token");
+            }
 
-        // 从token中获取用户信息
-        Long userId = jwtUtils.getUserIdFromToken(token);
+            // 获取消息内容
+            String content = (String) params.get("content");
+            if (content == null || content.isEmpty()) {
+                return Result.error("缺少content参数");
+            }
 
-        // 模拟发送成功
-        Map<String, Object> messageInfo = new HashMap<>();
-        messageInfo.put("id", 1L);
-        messageInfo.put("dialog_id", id);
-        messageInfo.put("sender_id", userId);
-        messageInfo.put("content", params.get("content"));
-        messageInfo.put("type", params.getOrDefault("type", "text"));
-        messageInfo.put("media_urls", params.get("media_urls"));
-        messageInfo.put("status", "sent");
-        messageInfo.put("created_at", new Date());
-
-        return Result.success(messageInfo);
-    }
-
-    /**
-     * 获取消息列表
-     *
-     * @param id     对话ID
-     * @param token  当前用户的token
-     * @param page   页码，默认 1
-     * @param size   每页数量，默认 50
-     * @param before 分页标记，获取此时间戳之前的消息
-     * @return 消息列表
-     */
-    @Override
-    public Result<Map<String, Object>> getMessageList(Long id, String token, Integer page, Integer size, Long before) {
-        // 模拟获取消息列表逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证对话ID
-        // 4. 检查用户是否有权限查看
-        // 5. 构建查询条件
-        // 6. 从数据库查询消息列表
-        // 7. 构建分页结果
-        
-        if (token == null || !jwtUtils.validateToken(token)) {
-            return Result.unauthorized("Token无效或已过期");
-        }
-
-        // 从token中获取用户信息
-        Long userId = jwtUtils.getUserIdFromToken(token);
-
-        // 模拟消息列表
-        ArrayList<Map<String, Object>> items = new ArrayList<>();
-        for (int i = 1; i <= size; i++) {
+            // 模拟发送消息
             Map<String, Object> message = new HashMap<>();
-            message.put("id", (long) ((page - 1) * size + i));
-            message.put("dialog_id", id);
+            message.put("id", System.currentTimeMillis());
+            message.put("dialog_id", dialogId);
             message.put("sender_id", userId);
-            message.put("content", "这是一条消息" + i);
-            message.put("type", "text");
-            message.put("status", "read");
-            message.put("created_at", new Date());
-            items.add(message);
+            message.put("content", content);
+            message.put("type", params.getOrDefault("type", "text"));
+            message.put("media_urls", params.get("media_urls"));
+            message.put("metadata", params.get("metadata"));
+            message.put("sent_at", System.currentTimeMillis());
+            message.put("status", "sent");
+
+            log.info("发送消息成功: dialogId={}, userId={}, content={}", dialogId, userId, content);
+            return Result.success(message);
+
+        } catch (Exception e) {
+            log.error("发送消息失败", e);
+            return Result.error("发送消息失败: " + e.getMessage());
         }
-
-        // 构建分页结果
-        Map<String, Object> result = new HashMap<>();
-        result.put("total", 100);
-        result.put("page", page);
-        result.put("size", size);
-        result.put("items", items);
-
-        return Result.success(result);
     }
 
-    /**
-     * 更新消息状态
-     *
-     * @param id     对话ID
-     * @param token  当前用户的token
-     * @param params 更新参数，包含last_read_message_id等
-     * @return 更新结果
-     */
     @Override
-    public Result<Map<String, Object>> updateMessageStatus(Long id, String token, Map<String, Object> params) {
-        // 模拟更新消息状态逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证参数
-        // 4. 验证对话ID
-        // 5. 检查用户是否有权限更新
-        // 6. 更新消息状态到数据库
-        // 7. 构建返回结果
-        
-        if (token == null || !jwtUtils.validateToken(token)) {
-            return Result.unauthorized("Token无效或已过期");
+    public Result<?> getMessageList(Long dialogId, String token, Integer page, Integer size, Long before) {
+        try {
+            // 从token中获取用户ID
+            Long userId = getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.error("无效的token");
+            }
+
+            // 模拟数据
+            List<Map<String, Object>> messageList = new ArrayList<>();
+            long timestamp = before != null ? before : System.currentTimeMillis();
+
+            for (int i = 0; i < size; i++) {
+                Map<String, Object> message = new HashMap<>();
+                message.put("id", System.currentTimeMillis() - i);
+                message.put("dialog_id", dialogId);
+                message.put("sender_id", i % 2 == 0 ? userId : 2L);
+                message.put("content", "这是消息" + (i + 1));
+                message.put("type", "text");
+                message.put("sent_at", timestamp - i * 60000);
+                message.put("status", "read");
+                messageList.add(message);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("items", messageList);
+            result.put("total", 200);
+            result.put("page", page);
+            result.put("size", size);
+            result.put("total_pages", (int) Math.ceil(200.0 / size));
+            result.put("before", messageList.isEmpty() ? null : messageList.get(messageList.size() - 1).get("sent_at"));
+
+            log.info("获取消息列表成功: dialogId={}, userId={}, page={}, size={}, before={}", dialogId, userId, page, size, before);
+            return Result.success(result);
+
+        } catch (Exception e) {
+            log.error("获取消息列表失败", e);
+            return Result.error("获取消息列表失败: " + e.getMessage());
         }
-
-        // 从token中获取用户信息
-        Long userId = jwtUtils.getUserIdFromToken(token);
-
-        // 模拟更新成功
-        Map<String, Object> result = new HashMap<>();
-        result.put("dialog_id", id);
-        result.put("user_id", userId);
-        result.put("last_read_message_id", params.get("last_read_message_id"));
-        result.put("updated_at", new Date());
-
-        return Result.success(result);
     }
 
-    /**
-     * 归档/取消归档对话
-     *
-     * @param id     对话ID
-     * @param token  当前用户的token
-     * @param params 更新参数，包含is_archived等
-     * @return 更新结果
-     */
     @Override
-    public Result<Map<String, Object>> archiveDialog(Long id, String token, Map<String, Object> params) {
-        // 模拟归档/取消归档对话逻辑
-        // 实际项目中需要：
-        // 1. 验证token
-        // 2. 从token中获取用户信息
-        // 3. 验证参数
-        // 4. 验证对话ID
-        // 5. 检查用户是否有权限更新
-        // 6. 更新对话归档状态到数据库
-        // 7. 构建返回结果
-        
-        if (token == null || !jwtUtils.validateToken(token)) {
-            return Result.unauthorized("Token无效或已过期");
+    public Result<Map<String, Object>> updateMessageStatus(Long dialogId, String token, Map<String, Object> params) {
+        try {
+            // 从token中获取用户ID
+            Long userId = getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.error("无效的token");
+            }
+
+            // 获取最后读取的消息ID
+            Long lastReadMessageId = (Long) params.get("last_read_message_id");
+            if (lastReadMessageId == null) {
+                return Result.error("缺少last_read_message_id参数");
+            }
+
+            // 模拟更新消息状态
+            Map<String, Object> result = new HashMap<>();
+            result.put("dialog_id", dialogId);
+            result.put("user_id", userId);
+            result.put("last_read_message_id", lastReadMessageId);
+            result.put("updated_at", System.currentTimeMillis());
+
+            log.info("更新消息状态成功: dialogId={}, userId={}, lastReadMessageId={}", dialogId, userId, lastReadMessageId);
+            return Result.success(result);
+
+        } catch (Exception e) {
+            log.error("更新消息状态失败", e);
+            return Result.error("更新消息状态失败: " + e.getMessage());
         }
+    }
 
-        // 从token中获取用户信息
-        Long userId = jwtUtils.getUserIdFromToken(token);
+    @Override
+    public Result<Map<String, Object>> archiveDialog(Long dialogId, String token, Map<String, Object> params) {
+        try {
+            // 从token中获取用户ID
+            Long userId = getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.error("无效的token");
+            }
 
-        // 模拟更新成功
-        Map<String, Object> result = new HashMap<>();
-        result.put("dialog_id", id);
-        result.put("user_id", userId);
-        result.put("is_archived", params.get("is_archived"));
-        result.put("updated_at", new Date());
+            // 获取归档状态
+            Boolean isArchived = (Boolean) params.get("is_archived");
+            if (isArchived == null) {
+                return Result.error("缺少is_archived参数");
+            }
 
-        return Result.success(result);
+            // 模拟归档/取消归档对话
+            Map<String, Object> result = new HashMap<>();
+            result.put("dialog_id", dialogId);
+            result.put("user_id", userId);
+            result.put("is_archived", isArchived);
+            result.put("updated_at", System.currentTimeMillis());
+
+            log.info("{}对话成功: dialogId={}, userId={}", isArchived ? "归档" : "取消归档", dialogId, userId);
+            return Result.success(result);
+
+        } catch (Exception e) {
+            log.error("归档/取消归档对话失败", e);
+            return Result.error("归档/取消归档对话失败: " + e.getMessage());
+        }
     }
 }

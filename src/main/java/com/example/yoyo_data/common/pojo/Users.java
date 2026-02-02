@@ -14,37 +14,39 @@
  * limitations under the License.
  */
 
-package com.example.yoyo_data.pojo;
+package com.example.yoyo_data.common.pojo;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.*;
-import org.apache.http.annotation.Contract;
 
-import javax.xml.soap.Text;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * @author <a href="mailto:chenxilzx1@gmail.com">theonefx</a>
+ * 用户表实体类
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 @TableName("users")
 public class Users implements Serializable {
 
-    @TableField("id")
-    private Integer id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     @TableField("username")
     private String userName;
 
-    @TableField("password_hash")
-    private String password;
-
     @TableField("email")
     private String email;
+
+    @TableField("password_hash")
+    private String passwordHash;
 
     @TableField("phone")
     private String phone;
@@ -59,10 +61,10 @@ public class Users implements Serializable {
     private String role;
 
     @TableField("is_active")
-    private Integer isActive;
+    private Boolean isActive;
 
     @TableField("is_verified")
-    private Integer isVerified;
+    private Boolean isVerified;
 
     @TableField("created_at")
     private LocalDateTime createdAt;
@@ -72,6 +74,4 @@ public class Users implements Serializable {
 
     @TableField("last_login_at")
     private LocalDateTime lastLoginAt;
-
-
 }

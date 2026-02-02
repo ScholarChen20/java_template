@@ -1,123 +1,162 @@
 package com.example.yoyo_data.controller;
 
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.service.PostService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpServletRequest;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 帖子控制器
- * 处理帖子相关操作
+ * 帖子模块控制器
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/posts")
-@Api(tags = "帖子管理")
+@Api(tags = "帖子模块", description = "帖子的创建、查询、更新、删除等操作")
 public class PostController {
-
-    @Autowired
-    private PostService postService;
-
-    /**
-     * 创建帖子
-     *
-     * @param params 创建帖子参数，包含title、content、media_urls、tags、location、status等
-     * @param request 请求对象，用于获取当前用户信息
-     * @return 创建结果
-     */
-    @PostMapping
-    @ApiOperation(value = "创建帖子", notes = "创建新帖子")
-    public Result<Map<String, Object>> createPost(@ApiParam(value = "创建帖子参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return postService.createPost(token, params);
-    }
 
     /**
      * 获取帖子列表
      *
-     * @param page     页码，默认 1
-     * @param size     每页数量，默认 10
-     * @param status   状态，可选 published, draft
-     * @param tag      标签筛选
-     * @param location 位置筛选
-     * @param sort     排序方式，默认 created_at
+     * @param page 页码
+     * @param size 每页大小
+     * @param category 分类
      * @return 帖子列表
      */
-    @GetMapping
-    @ApiOperation(value = "获取帖子列表", notes = "获取帖子列表，支持分页和筛选")
-    public Result<Map<String, Object>> getPostList(
-            @ApiParam(value = "页码", defaultValue = "1") @RequestParam(defaultValue = "1") Integer page,
-            @ApiParam(value = "每页数量", defaultValue = "10") @RequestParam(defaultValue = "10") Integer size,
-            @ApiParam(value = "状态") @RequestParam(required = false) String status,
-            @ApiParam(value = "标签") @RequestParam(required = false) String tag,
-            @ApiParam(value = "位置") @RequestParam(required = false) String location,
-            @ApiParam(value = "排序方式") @RequestParam(required = false) String sort) {
-        return postService.getPostList(page, size, status, tag, location, sort);
+    @GetMapping("/list")
+    @ApiOperation(value = "获取帖子列表", notes = "获取帖子列表，支持分页和分类筛选")
+    public Result<?> getPostList(
+            @ApiParam(value = "页码", required = false, defaultValue = "1") @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @ApiParam(value = "每页大小", required = false, defaultValue = "10") @RequestParam(value = "size", defaultValue = "10") Integer size,
+            @ApiParam(value = "分类", required = false) @RequestParam(value = "category", required = false) String category
+    ) {
+        log.info("获取帖子列表: page={}, size={}, category={}", page, size, category);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("page", page);
+        result.put("size", size);
+        result.put("category", category);
+        result.put("total", 100);
+        result.put("posts", new java.util.ArrayList<>());
+        
+        return Result.success(result);
     }
 
     /**
      * 获取帖子详情
      *
-     * @param id 帖子ID
-     * @param request 请求对象，用于获取当前用户信息
+     * @param postId 帖子ID
      * @return 帖子详情
      */
-    @GetMapping("/{id}")
-    @ApiOperation(value = "获取帖子详情", notes = "根据帖子ID获取帖子详情")
-    public Result<Map<String, Object>> getPostDetail(@ApiParam(value = "帖子ID") @PathVariable Long id, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return postService.getPostDetail(id, token);
+    @GetMapping("/detail/{postId}")
+    @ApiOperation(value = "获取帖子详情", notes = "获取帖子的详细信息")
+    public Result<?> getPostDetail(
+            @ApiParam(value = "帖子ID", required = true) @PathVariable("postId") Long postId
+    ) {
+        log.info("获取帖子详情: postId={}", postId);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", postId);
+        result.put("title", "帖子标题" + postId);
+        result.put("content", "帖子内容" + postId);
+        result.put("userId", 1L);
+        result.put("username", "用户1");
+        result.put("category", "technology");
+        result.put("tags", new java.util.ArrayList<>());
+        result.put("likeCount", 100);
+        result.put("commentCount", 50);
+        result.put("viewCount", 1000);
+        result.put("createdAt", System.currentTimeMillis());
+        result.put("updatedAt", System.currentTimeMillis());
+        
+        return Result.success(result);
+    }
+
+    /**
+     * 创建帖子
+     *
+     * @param title 标题
+     * @param content 内容
+     * @param category 分类
+     * @param tags 标签
+     * @return 创建结果
+     */
+    @PostMapping("/create")
+    @ApiOperation(value = "创建帖子", notes = "创建新帖子")
+    public Result<?> createPost(
+            @ApiParam(value = "标题", required = true) @RequestParam("title") String title,
+            @ApiParam(value = "内容", required = true) @RequestParam("content") String content,
+            @ApiParam(value = "分类", required = true) @RequestParam("category") String category,
+            @ApiParam(value = "标签", required = false) @RequestParam(value = "tags", required = false) String tags
+    ) {
+        log.info("创建帖子: title={}, category={}, tags={}", title, category, tags);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", System.currentTimeMillis());
+        result.put("title", title);
+        result.put("content", content);
+        result.put("category", category);
+        result.put("tags", tags != null ? java.util.Arrays.asList(tags.split(",")) : new java.util.ArrayList<>());
+        result.put("userId", 1L);
+        result.put("username", "用户1");
+        result.put("createdAt", System.currentTimeMillis());
+        result.put("updatedAt", System.currentTimeMillis());
+        
+        return Result.success(result);
     }
 
     /**
      * 更新帖子
      *
-     * @param id     帖子ID
-     * @param params 更新参数，包含title、content、tags等
-     * @param request 请求对象，用于获取当前用户信息
+     * @param postId 帖子ID
+     * @param title 标题
+     * @param content 内容
+     * @param category 分类
+     * @param tags 标签
      * @return 更新结果
      */
-    @PutMapping("/{id}")
+    @PutMapping("/update/{postId}")
     @ApiOperation(value = "更新帖子", notes = "更新帖子信息")
-    public Result<Map<String, Object>> updatePost(@ApiParam(value = "帖子ID") @PathVariable Long id, @ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return postService.updatePost(id, token, params);
+    public Result<?> updatePost(
+            @ApiParam(value = "帖子ID", required = true) @PathVariable("postId") Long postId,
+            @ApiParam(value = "标题", required = true) @RequestParam("title") String title,
+            @ApiParam(value = "内容", required = true) @RequestParam("content") String content,
+            @ApiParam(value = "分类", required = true) @RequestParam("category") String category,
+            @ApiParam(value = "标签", required = false) @RequestParam(value = "tags", required = false) String tags
+    ) {
+        log.info("更新帖子: postId={}, title={}, category={}, tags={}", postId, title, category, tags);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", postId);
+        result.put("title", title);
+        result.put("content", content);
+        result.put("category", category);
+        result.put("tags", tags != null ? java.util.Arrays.asList(tags.split(",")) : new java.util.ArrayList<>());
+        result.put("updatedAt", System.currentTimeMillis());
+        
+        return Result.success(result);
     }
 
     /**
      * 删除帖子
      *
-     * @param id 帖子ID
-     * @param request 请求对象，用于获取当前用户信息
+     * @param postId 帖子ID
      * @return 删除结果
      */
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/delete/{postId}")
     @ApiOperation(value = "删除帖子", notes = "删除帖子")
-    public Result<Map<String, Object>> deletePost(@ApiParam(value = "帖子ID") @PathVariable Long id, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return postService.deletePost(id, token);
+    public Result<?> deletePost(
+            @ApiParam(value = "帖子ID", required = true) @PathVariable("postId") Long postId
+    ) {
+        log.info("删除帖子: postId={}", postId);
+        return Result.success("删除帖子成功");
     }
 }

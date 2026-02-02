@@ -5,6 +5,9 @@ spring:
     url: jdbc:mysql://localhost:3306/travel_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: root
     password: 123456
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/test
   redis:
     host: localhost
     port: 6379
@@ -60,8 +63,8 @@ kafka:
     max-poll-records: 500
 
 minio:
-  endpoint: http://localhost:9000
-  accessKey: minioadmin
-  secretKey: minioadmin
-  bucketName: yoyo-data
+  endpoint: http://127.0.0.1:9000
+  accessKey: minio
+  secretKey: minio123
+  bucketName: travel-agent
   secure: false

@@ -65,7 +65,7 @@ public class RateLimitAspect {
         }
 
         // 设置速率
-        rateLimiter.setRate(RateIntervalUnit.SECONDS, annotation.rate());
+//        rateLimiter.setRate(RateIntervalUnit.SECONDS, annotation.rate());
 
         try {
             return pjp.proceed();

@@ -1,6 +1,8 @@
 package com.example.yoyo_data.controller;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.pojo.UserProfile;
+import com.example.yoyo_data.common.pojo.Users;
 import com.example.yoyo_data.service.UserService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -33,7 +35,7 @@ public class UserController {
      */
     @GetMapping("/me")
     @ApiOperation(value = "获取当前用户信息", notes = "获取当前登录用户的详细信息")
-    public Result<Map<String, Object>> getCurrentUser(HttpServletRequest request) {
+    public Result<Users> getCurrentUser(HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -51,7 +53,7 @@ public class UserController {
      */
     @PutMapping("/me")
     @ApiOperation(value = "更新当前用户信息", notes = "更新当前登录用户的信息")
-    public Result<Map<String, Object>> updateCurrentUser(@ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<Users> updateCurrentUser(@ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -68,7 +70,7 @@ public class UserController {
      */
     @GetMapping("/me/profile")
     @ApiOperation(value = "获取当前用户档案", notes = "获取当前登录用户的详细档案信息")
-    public Result<Map<String, Object>> getCurrentUserProfile(HttpServletRequest request) {
+    public Result<UserProfile> getCurrentUserProfile(HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -86,7 +88,7 @@ public class UserController {
      */
     @PutMapping("/me/profile")
     @ApiOperation(value = "更新当前用户档案", notes = "更新当前登录用户的档案信息")
-    public Result<Map<String, Object>> updateCurrentUserProfile(@ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<UserProfile> updateCurrentUserProfile(@ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -103,7 +105,7 @@ public class UserController {
      */
     @GetMapping("/{id}")
     @ApiOperation(value = "获取其他用户信息", notes = "根据用户ID获取用户的公开信息")
-    public Result<Map<String, Object>> getUserById(@ApiParam(value = "用户ID") @PathVariable Long id) {
+    public Result<Users> getUserById(@ApiParam(value = "用户ID") @PathVariable Long id) {
         return userService.getUserById(id);
     }
 }

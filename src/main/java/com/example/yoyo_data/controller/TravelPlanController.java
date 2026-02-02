@@ -9,148 +9,161 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpServletRequest;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 旅行计划控制器
- * 处理旅行计划相关操作
+ * 旅行计划模块控制器
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/travel-plans")
-@Api(tags = "旅行计划模块")
+@Api(tags = "旅行计划模块", description = "旅行计划的创建、查询、更新、删除等操作")
 public class TravelPlanController {
-
     @Autowired
     private TravelPlanService travelPlanService;
 
     /**
-     * 创建旅行计划
-     *
-     * @param params 创建旅行计划参数，包含title、description、start_date、end_date、destinations、budget等
-     * @param request 请求对象，用于获取当前用户信息
-     * @return 创建结果
-     */
-    @PostMapping
-    @ApiOperation(value = "创建旅行计划", notes = "创建新的旅行计划")
-    public Result<Map<String, Object>> createTravelPlan(@ApiParam(value = "创建旅行计划参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return travelPlanService.createTravelPlan(token, params);
-    }
-
-    /**
      * 获取旅行计划列表
      *
-     * @param page     页码，默认 1
-     * @param size     每页数量，默认 10
-     * @param status   状态，可选 draft, active, completed, cancelled
-     * @param sort     排序方式，默认 created_at
-     * @param request  请求对象，用于获取当前用户信息
+     * @param page 页码
+     * @param size 每页大小
      * @return 旅行计划列表
      */
-    @GetMapping
-    @ApiOperation(value = "获取旅行计划列表", notes = "获取当前用户的旅行计划列表")
-    public Result<Map<String, Object>> getTravelPlanList(
-            @ApiParam(value = "页码", defaultValue = "1") @RequestParam(defaultValue = "1") Integer page,
-            @ApiParam(value = "每页数量", defaultValue = "10") @RequestParam(defaultValue = "10") Integer size,
-            @ApiParam(value = "状态") @RequestParam(required = false) String status,
-            @ApiParam(value = "排序方式") @RequestParam(required = false) String sort,
-            HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return travelPlanService.getTravelPlanList(token, page, size, status, sort);
+    @GetMapping("/list")
+    @ApiOperation(value = "获取旅行计划列表", notes = "获取旅行计划列表，支持分页")
+    public Result<?> getTravelPlanList(
+            @ApiParam(value = "页码", required = false, defaultValue = "1") @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @ApiParam(value = "每页大小", required = false, defaultValue = "10") @RequestParam(value = "size", defaultValue = "10") Integer size
+    ) {
+        log.info("获取旅行计划列表: page={}, size={}", page, size);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("page", page);
+        result.put("size", size);
+        result.put("total", 100);
+        result.put("plans", new java.util.ArrayList<>());
+        
+        return Result.success(result);
     }
 
     /**
      * 获取旅行计划详情
      *
-     * @param id 旅行计划ID
-     * @param request 请求对象，用于获取当前用户信息
+     * @param planId 旅行计划ID
      * @return 旅行计划详情
      */
-    @GetMapping("/{id}")
-    @ApiOperation(value = "获取旅行计划详情", notes = "根据旅行计划ID获取旅行计划详情")
-    public Result<Map<String, Object>> getTravelPlanDetail(@ApiParam(value = "旅行计划ID") @PathVariable Long id, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return travelPlanService.getTravelPlanDetail(id, token);
+    @GetMapping("/detail/{planId}")
+    @ApiOperation(value = "获取旅行计划详情", notes = "获取旅行计划的详细信息")
+    public Result<?> getTravelPlanDetail(
+            @ApiParam(value = "旅行计划ID", required = true) @PathVariable("planId") Long planId
+    ) {
+        log.info("获取旅行计划详情: planId={}", planId);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", planId);
+        result.put("title", "旅行计划" + planId);
+        result.put("description", "这是一个详细的旅行计划" + planId);
+        result.put("destination", "目的地" + planId);
+        result.put("startDate", "2024-01-01");
+        result.put("endDate", "2024-01-05");
+        result.put("days", 5);
+        result.put("userId", 1L);
+        result.put("username", "用户1");
+        result.put("createdAt", System.currentTimeMillis());
+        result.put("updatedAt", System.currentTimeMillis());
+        
+        return Result.success(result);
+    }
+
+    /**
+     * 创建旅行计划
+     *
+     * @param title 标题
+     * @param description 描述
+     * @param destination 目的地
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     * @return 创建结果
+     */
+    @PostMapping("/create")
+    @ApiOperation(value = "创建旅行计划", notes = "创建新的旅行计划")
+    public Result<?> createTravelPlan(
+            @ApiParam(value = "标题", required = true) @RequestParam("title") String title,
+            @ApiParam(value = "描述", required = true) @RequestParam("description") String description,
+            @ApiParam(value = "目的地", required = true) @RequestParam("destination") String destination,
+            @ApiParam(value = "开始日期", required = true) @RequestParam("startDate") String startDate,
+            @ApiParam(value = "结束日期", required = true) @RequestParam("endDate") String endDate
+    ) {
+        log.info("创建旅行计划: title={}, destination={}, startDate={}, endDate={}", title, destination, startDate, endDate);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", System.currentTimeMillis());
+        result.put("title", title);
+        result.put("description", description);
+        result.put("destination", destination);
+        result.put("startDate", startDate);
+        result.put("endDate", endDate);
+        result.put("days", 5);
+        result.put("userId", 1L);
+        result.put("username", "用户1");
+        result.put("createdAt", System.currentTimeMillis());
+        result.put("updatedAt", System.currentTimeMillis());
+        
+        return Result.success(result);
     }
 
     /**
      * 更新旅行计划
      *
-     * @param id     旅行计划ID
-     * @param params 更新参数，包含title、description、start_date、end_date、destinations、budget等
-     * @param request 请求对象，用于获取当前用户信息
+     * @param planId 旅行计划ID
+     * @param title 标题
+     * @param description 描述
+     * @param destination 目的地
+     * @param startDate 开始日期
+     * @param endDate 结束日期
      * @return 更新结果
      */
-    @PutMapping("/{id}")
+    @PutMapping("/update/{planId}")
     @ApiOperation(value = "更新旅行计划", notes = "更新旅行计划信息")
-    public Result<Map<String, Object>> updateTravelPlan(@ApiParam(value = "旅行计划ID") @PathVariable Long id, @ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return travelPlanService.updateTravelPlan(id, token, params);
+    public Result<?> updateTravelPlan(
+            @ApiParam(value = "旅行计划ID", required = true) @PathVariable("planId") Long planId,
+            @ApiParam(value = "标题", required = true) @RequestParam("title") String title,
+            @ApiParam(value = "描述", required = true) @RequestParam("description") String description,
+            @ApiParam(value = "目的地", required = true) @RequestParam("destination") String destination,
+            @ApiParam(value = "开始日期", required = true) @RequestParam("startDate") String startDate,
+            @ApiParam(value = "结束日期", required = true) @RequestParam("endDate") String endDate
+    ) {
+        log.info("更新旅行计划: planId={}, title={}, destination={}, startDate={}, endDate={}", planId, title, destination, startDate, endDate);
+        
+        // 模拟数据
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", planId);
+        result.put("title", title);
+        result.put("description", description);
+        result.put("destination", destination);
+        result.put("startDate", startDate);
+        result.put("endDate", endDate);
+        result.put("days", 5);
+        result.put("updatedAt", System.currentTimeMillis());
+        
+        return Result.success(result);
     }
 
     /**
      * 删除旅行计划
      *
-     * @param id 旅行计划ID
-     * @param request 请求对象，用于获取当前用户信息
+     * @param planId 旅行计划ID
      * @return 删除结果
      */
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/delete/{planId}")
     @ApiOperation(value = "删除旅行计划", notes = "删除旅行计划")
-    public Result<Map<String, Object>> deleteTravelPlan(@ApiParam(value = "旅行计划ID") @PathVariable Long id, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return travelPlanService.deleteTravelPlan(id, token);
-    }
-
-    /**
-     * 分享旅行计划
-     *
-     * @param id 旅行计划ID
-     * @param request 请求对象，用于获取当前用户信息
-     * @return 分享结果
-     */
-    @PostMapping("/{id}/share")
-    @ApiOperation(value = "分享旅行计划", notes = "生成旅行计划的分享链接")
-    public Result<Map<String, Object>> shareTravelPlan(@ApiParam(value = "旅行计划ID") @PathVariable Long id, HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-        return travelPlanService.shareTravelPlan(id, token);
-    }
-
-    /**
-     * 获取公开的旅行计划
-     *
-     * @param shareId 分享ID
-     * @return 旅行计划详情
-     */
-    @GetMapping("/shared/{shareId}")
-    @ApiOperation(value = "获取公开的旅行计划", notes = "通过分享ID获取公开的旅行计划")
-    public Result<Map<String, Object>> getSharedTravelPlan(@ApiParam(value = "分享ID") @PathVariable String shareId) {
-        return travelPlanService.getSharedTravelPlan(shareId);
+    public Result<?> deleteTravelPlan(@ApiParam(value = "旅行计划ID", required = true) @PathVariable("planId") Long planId) {
+        travelPlanService.deleteTravelPlan(planId);
+        log.info("删除旅行计划: planId={}", planId);
+        return Result.success("删除旅行计划成功");
     }
 }

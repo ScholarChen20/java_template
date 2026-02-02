@@ -1,6 +1,8 @@
 package com.example.yoyo_data.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.pojo.Comment;
 import java.util.Map;
 
 /**
@@ -17,7 +19,7 @@ public interface CommentService {
      * @param params 创建评论参数，包含content、parent_id等
      * @return 创建结果
      */
-    Result<Map<String, Object>> createComment(Long postId, String token, Map<String, Object> params);
+    Result<Comment> createComment(Long postId, String token, Map<String, Object> params);
 
     /**
      * 获取评论列表
@@ -28,7 +30,7 @@ public interface CommentService {
      * @param sort   排序方式，默认 created_at
      * @return 评论列表
      */
-    Result<Map<String, Object>> getCommentList(Long postId, Integer page, Integer size, String sort);
+    Result<Page<Comment>> getCommentList(Long postId, Integer page, Integer size, String sort);
 
     /**
      * 删除评论
@@ -37,5 +39,5 @@ public interface CommentService {
      * @param token 当前用户的token
      * @return 删除结果
      */
-    Result<Map<String, Object>> deleteComment(Long id, String token);
+    Result<Void> deleteComment(Long id, String token);
 }

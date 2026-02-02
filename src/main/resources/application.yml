@@ -61,3 +61,16 @@ logging:
     name: logs/yoyo_data.log
     max-size: 10MB
     max-history: 30
+
+# MinIO配置
+minio:
+  endpoint: http://127.0.0.1:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket-name: yoyo-data
+  secure: false
+  connect-timeout: 10000
+  write-timeout: 10000
+  read-timeout: 10000
+  part-size: 5242880
+  expiration-days: 7

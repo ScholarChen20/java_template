@@ -99,12 +99,13 @@ public class DialogController {
      */
     @PostMapping("/{id}/messages")
     @ApiOperation(value = "发送消息", notes = "向对话发送消息")
-    public Result<Map<String, Object>> sendMessage(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "发送消息参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<?> sendMessage(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "发送消息参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
             token = token.substring(7);
         }
+
         return dialogService.sendMessage(id, token, params);
     }
 
@@ -120,7 +121,7 @@ public class DialogController {
      */
     @GetMapping("/{id}/messages")
     @ApiOperation(value = "获取消息列表", notes = "获取对话的消息列表")
-    public Result<Map<String, Object>> getMessageList(
+    public Result<?> getMessageList(
             @ApiParam(value = "对话ID") @PathVariable Long id,
             @ApiParam(value = "页码", defaultValue = "1") @RequestParam(defaultValue = "1") Integer page,
             @ApiParam(value = "每页数量", defaultValue = "50") @RequestParam(defaultValue = "50") Integer size,

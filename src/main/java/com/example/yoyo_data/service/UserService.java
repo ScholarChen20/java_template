@@ -1,6 +1,9 @@
 package com.example.yoyo_data.service;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.pojo.UserProfile;
+import com.example.yoyo_data.common.pojo.Users;
+
 import java.util.Map;
 
 /**
@@ -9,13 +12,25 @@ import java.util.Map;
  */
 public interface UserService {
 
+    Result<?> getUserInfo(Long userId);
+
+    Result<?> updateUserInfo(Long userId, String username, String bio, String avatarUrl);
+
+    Result<?> toggleFollow(Long userId, Long targetUserId);
+
+    Result<?> getFollowStatus(Long userId, Long targetUserId);
+
+    Result<?> getFollowList(Long userId, Integer page, Integer size);
+
+    Result<?> getFollowerList(Long userId, Integer page, Integer size);
+
     /**
      * 获取当前用户信息
      *
      * @param token 当前用户的token
      * @return 当前用户信息
      */
-    Result<Map<String, Object>> getCurrentUser(String token);
+    Result<Users> getCurrentUser(String token);
 
     /**
      * 更新当前用户信息
@@ -24,7 +39,7 @@ public interface UserService {
      * @param params 更新参数，包含phone、avatar_url、bio等
      * @return 更新结果
      */
-    Result<Map<String, Object>> updateCurrentUser(String token, Map<String, Object> params);
+    Result<Users> updateCurrentUser(String token, Map<String, Object> params);
 
     /**
      * 获取当前用户档案
@@ -32,7 +47,7 @@ public interface UserService {
      * @param token 当前用户的token
      * @return 当前用户档案
      */
-    Result<Map<String, Object>> getCurrentUserProfile(String token);
+    Result<UserProfile> getCurrentUserProfile(String token);
 
     /**
      * 更新当前用户档案
@@ -41,7 +56,7 @@ public interface UserService {
      * @param params 更新参数，包含full_name、gender、birth_date、location、travel_preferences、visited_cities等
      * @return 更新结果
      */
-    Result<Map<String, Object>> updateCurrentUserProfile(String token, Map<String, Object> params);
+    Result<UserProfile> updateCurrentUserProfile(String token, Map<String, Object> params);
 
     /**
      * 获取其他用户信息
@@ -49,5 +64,5 @@ public interface UserService {
      * @param id 用户ID
      * @return 用户信息
      */
-    Result<Map<String, Object>> getUserById(Long id);
+    Result<Users> getUserById(Long id);
 }
