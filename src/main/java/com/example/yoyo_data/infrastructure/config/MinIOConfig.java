@@ -28,23 +28,17 @@ public class MinIOConfig {
     @Bean
     public MinioClient minioClient() {
         try {
-            MinioClient minioClient = MinioClient.builder()
-                    .endpoint(minIOProperties.getEndpoint())
-                    .credentials(minIOProperties.getAccessKey(), minIOProperties.getSecretKey())
-                    .build();
+            // 使用MinIO客户端7.x版本的构造方式
+            MinioClient minioClient = new MinioClient(
+                    minIOProperties.getEndpoint(),
+                    minIOProperties.getAccessKey(),
+                    minIOProperties.getSecretKey()
+            );
             
             // 检查默认bucket是否存在，不存在则创建
-            boolean found = minioClient.bucketExists(
-                    io.minio.BucketExistsArgs.builder()
-                            .bucket(minIOProperties.getBucketName())
-                            .build()
-            );
+            boolean found = minioClient.bucketExists(minIOProperties.getBucketName());
             if (!found) {
-                minioClient.makeBucket(
-                        io.minio.MakeBucketArgs.builder()
-                                .bucket(minIOProperties.getBucketName())
-                                .build()
-                );
+                minioClient.makeBucket(minIOProperties.getBucketName());
                 log.info("创建MinIO默认Bucket: {}", minIOProperties.getBucketName());
             }
             

@@ -19,14 +19,27 @@ import java.util.Map;
 public class JwtUtils {
     private static final Logger log = LoggerFactory.getLogger(JwtUtils.class);
 
-    @Value("${jwt.secret:mySecretKeyForJwtTokenGenerationAndValidation1234567890}")
+    @Value("${jwt.secret}")
     private String secret;
 
     @Value("${jwt.expiration:7200000}")
     private Long expiration;
 
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
+        try {
+            // 尝试使用配置的密钥
+            SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
+            // 检查密钥大小是否足够
+            if (key.getEncoded().length * 8 >= 512) {
+                return key;
+            }
+            // 密钥大小不够，使用默认的安全密钥
+            log.warn("配置的 JWT 密钥大小不够安全，使用默认的安全密钥");
+        } catch (Exception e) {
+            log.warn("使用配置的 JWT 密钥失败，使用默认的安全密钥", e);
+        }
+        // 使用默认的安全密钥
+        return Keys.secretKeyFor(SignatureAlgorithm.HS512);
     }
 
     public String generateToken(JwtUserDTO jwtUser) {

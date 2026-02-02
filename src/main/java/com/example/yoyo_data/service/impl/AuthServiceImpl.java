@@ -128,8 +128,20 @@ public class AuthServiceImpl implements AuthService {
             }
 
             // 2. 验证密码
-            if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-                log.info("用户名或密码错误,请求密码：{}, 用户密码：{}", request.getPassword(), user.getPasswordHash());
+            boolean passwordMatch = false;
+            String passwordHash = user.getPasswordHash();
+            
+            // 检查密码是否是BCrypt格式
+            if (passwordHash != null && passwordHash.startsWith("$2a$")) {
+                // 使用BCrypt验证密码
+                passwordMatch = passwordEncoder.matches(request.getPassword(), passwordHash);
+            } else {
+                // 直接比较明文
+                passwordMatch = request.getPassword().equals(passwordHash);
+            }
+            
+            if (!passwordMatch) {
+                log.info("用户名或密码错误,请求密码：{}, 用户密码：{}", request.getPassword(), passwordHash);
                 throw new BusinessException("用户名或密码错误");
             }
 

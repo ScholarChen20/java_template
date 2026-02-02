@@ -36,7 +36,7 @@ spring:
       add-mappings: true
 
 jwt:
-  secret: Cel1fqtXo0lLw6IuwFWaDC0xKEg3p+X16qDFNg+anVY=
+  secret: PbMVae4eN/1NmzCno0H2ubuJJEmcIQXuT6loO7JGEPg=
   expiration: 7200000
   token-expire: 7200
   token-type: Bearer
@@ -67,7 +67,7 @@ minio:
   endpoint: http://127.0.0.1:9000
   access-key: minioadmin
   secret-key: minioadmin
-  bucket-name: yoyo-data
+  bucket-name: travel-agent
   secure: false
   connect-timeout: 10000
   write-timeout: 10000

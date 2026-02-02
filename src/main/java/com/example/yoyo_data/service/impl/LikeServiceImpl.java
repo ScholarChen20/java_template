@@ -35,7 +35,7 @@ public class LikeServiceImpl implements LikeService {
 
         } catch (Exception e) {
             log.error("点赞操作失败", e);
-            return Result.failed("点赞操作失败: " + e.getMessage());
+            return Result.error("点赞操作失败: " + e.getMessage());
         }
     }
 
@@ -56,7 +56,7 @@ public class LikeServiceImpl implements LikeService {
 
         } catch (Exception e) {
             log.error("获取点赞状态失败", e);
-            return Result.failed("获取点赞状态失败: " + e.getMessage());
+            return Result.error("获取点赞状态失败: " + e.getMessage());
         }
     }
 
@@ -85,7 +85,7 @@ public class LikeServiceImpl implements LikeService {
 
         } catch (Exception e) {
             log.error("获取点赞列表失败", e);
-            return Result.failed("获取点赞列表失败: " + e.getMessage());
+            return Result.error("获取点赞列表失败: " + e.getMessage());
         }
     }
 }

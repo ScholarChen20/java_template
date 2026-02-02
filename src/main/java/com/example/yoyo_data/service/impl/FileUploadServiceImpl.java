@@ -4,9 +4,7 @@ import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.infrastructure.config.properties.MinIOProperties;
 import com.example.yoyo_data.service.FileUploadService;
 import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import io.minio.RemoveObjectArgs;
-import io.minio.StatObjectArgs;
+import io.minio.PutObjectOptions;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -52,24 +50,30 @@ public class FileUploadServiceImpl implements FileUploadService {
 
             // 4. 上传文件
             try (InputStream inputStream = file.getInputStream()) {
+                // 使用MinIO客户端7.x版本的API
+                // 创建PutObjectOptions对象
+                PutObjectOptions options = new PutObjectOptions(file.getSize(), -1);
+                if (file.getContentType() != null) {
+                    options.setContentType(file.getContentType());
+                }
+                
                 minioClient.putObject(
-                        PutObjectArgs.builder()
-                                .bucket(bucketName)
-                                .object(objectName)
-                                .stream(inputStream, file.getSize(), -1)
-                                .contentType(file.getContentType())
-                                .build()
+                        bucketName,
+                        objectName,
+                        inputStream,
+                        options
                 );
             }
 
-            // 5. 生成文件URL
-            String fileUrl = minIOProperties.getEndpoint() + "/" + bucketName + "/" + objectName;
+            // 5. 生成预签名URL
+            // 使用MinIO客户端7.x版本的API，生成7天有效期的预签名URL
+            String presignedUrl = minioClient.presignedGetObject(bucketName, objectName, 7 * 24 * 3600);
 
             // 6. 构建响应
             Map<String, Object> result = new HashMap<>();
             result.put("bucketName", bucketName);
             result.put("objectName", objectName);
-            result.put("fileUrl", fileUrl);
+            result.put("fileUrl", presignedUrl);
             result.put("fileSize", file.getSize());
             result.put("contentType", file.getContentType());
 
@@ -94,20 +98,12 @@ public class FileUploadServiceImpl implements FileUploadService {
             }
 
             // 2. 检查文件是否存在
-            minioClient.statObject(
-                    StatObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .build()
-            );
+            // 使用MinIO客户端7.x版本的API
+            minioClient.statObject(bucketName, objectName);
 
             // 3. 删除文件
-            minioClient.removeObject(
-                    RemoveObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .build()
-            );
+            // 使用MinIO客户端7.x版本的API
+            minioClient.removeObject(bucketName, objectName);
 
             log.info("文件删除成功: bucketName={}, objectName={}", bucketName, objectName);
             return Result.success("文件删除成功");
@@ -133,21 +129,12 @@ public class FileUploadServiceImpl implements FileUploadService {
             }
 
             // 2. 检查文件是否存在
-            minioClient.statObject(
-                    StatObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .build()
-            );
+            // 使用MinIO客户端7.x版本的API
+            minioClient.statObject(bucketName, objectName);
 
             // 3. 生成预签名URL
-            String presignedUrl = minioClient.getPresignedObjectUrl(
-                    io.minio.GetPresignedObjectUrlArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .expiry(expiry)
-                            .build()
-            );
+            // 使用MinIO客户端7.x版本的API
+            String presignedUrl = minioClient.presignedGetObject(bucketName, objectName, expiry);
 
             // 4. 构建响应
             Map<String, Object> result = new HashMap<>();
