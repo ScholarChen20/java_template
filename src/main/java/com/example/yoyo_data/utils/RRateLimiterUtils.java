@@ -9,6 +9,9 @@ import org.redisson.api.RateType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * redisson 限流工具类
+ */
 @Slf4j
 @Component
 public class RRateLimiterUtils {

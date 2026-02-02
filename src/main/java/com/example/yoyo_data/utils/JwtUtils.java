@@ -1,6 +1,6 @@
-package com.example.yoyo_data.infrastructure.utils;
+package com.example.yoyo_data.utils;
 
-import com.example.yoyo_data.support.dto.JwtUserDTO;
+import com.example.yoyo_data.common.dto.JwtUserDTO;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;

@@ -7,6 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * HashUtils 类
+ */
 @Slf4j
 public class HashUtils {
     public static String hash(String input) throws NoSuchAlgorithmException {

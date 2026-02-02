@@ -1,0 +1,59 @@
+spring:
+  profiles: test
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://test-db:3306/travel_agent_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: test_user
+    password: ${DB_PASSWORD:test_password}
+  redis:
+    host: test-redis
+    port: 6379
+    password: ${REDIS_PASSWORD:test_password}
+    timeout: 5000
+    lettuce:
+      pool:
+        min-idle: 4
+        max-idle: 100
+        max-active: 200
+        max-wait: 10000
+    database: 1
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  type-aliases-package: com.example.yoyo_data.common.pojo
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  level:
+    root: WARN
+    com.example.yoyo_data: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/yoyo_data_test.log
+    max-size: 10MB
+    max-history: 10
+
+kafka:
+  bootstrap-servers: test-kafka:9092
+  producer:
+    retries: 3
+    acks: all
+    batch-size: 16384
+    buffer-memory: 33554432
+  consumer:
+    group-id: yoyo_data_test_group
+    enable-auto-commit: true
+    auto-commit-interval-ms: 1000
+
+minio:
+  endpoint: http://test-minio:9000
+  accessKey: ${MINIO_ACCESS_KEY:test_access_key}
+  secretKey: ${MINIO_SECRET_KEY:test_secret_key}
+  bucketName: yoyo-data-test
+  secure: false

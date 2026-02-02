@@ -1,0 +1,95 @@
+# 业务自定义配置模板
+# 根据实际需求修改以下配置
+
+# ================== 系统通用配置 ==================
+system:
+  # 系统名称
+  name: yoyo_data
+  # 系统版本
+  version: 1.0.0
+  # 描述
+  description: Enterprise-grade template framework based on Spring Boot
+
+# ================== 业务配置 ==================
+business:
+  # 限流相关配置
+  rate-limit:
+    # 全局限流开关
+    enabled: true
+    # 默认限流速率（请求/秒）
+    default-rate: 100
+    # 默认时间窗口（秒）
+    default-interval: 60
+
+  # 缓存相关配置
+  cache:
+    # 缓存过期时间（秒）
+    default-ttl: 3600
+    # 最大缓存条目数
+    max-entries: 10000
+    # 缓存预热开关
+    warmup-enabled: false
+
+  # 异步任务相关配置
+  async:
+    # 线程池核心线程数
+    core-pool-size: 10
+    # 线程池最大线程数
+    max-pool-size: 50
+    # 队列容量
+    queue-capacity: 1000
+    # 线程名前缀
+    thread-name-prefix: async-task-
+
+  # 文件上传相关配置
+  file:
+    # 最大上传文件大小（MB）
+    max-size: 100
+    # 允许的文件类型
+    allowed-types: jpg,jpeg,png,gif,doc,docx,pdf,xlsx,xls,zip
+    # 文件保存路径
+    upload-path: /uploads
+
+# ================== 第三方服务集成 ==================
+third-party:
+  # Aliyun配置示例
+  aliyun:
+    # AccessKeyId
+    access-key-id: ${ALIYUN_ACCESS_KEY_ID:your-access-key}
+    # AccessKeySecret
+    access-key-secret: ${ALIYUN_ACCESS_KEY_SECRET:your-secret-key}
+    # 地域
+    region: cn-beijing
+
+  # 短信服务配置示例
+  sms:
+    # 阿里云短信API
+    provider: aliyun
+    # 短信签名
+    sign-name: YOYO
+    # 短信模板
+    template-code: SMS_123456
+
+  # 邮件服务配置示例
+  email:
+    # SMTP服务器
+    smtp-host: smtp.qq.com
+    # SMTP端口
+    smtp-port: 587
+    # 发件人邮箱
+    from-address: ${EMAIL_FROM:noreply@example.com}
+    # 发件人密码（应该使用环境变量）
+    password: ${EMAIL_PASSWORD:your-password}
+
+# ================== 特性开关 ==================
+feature-flags:
+  # 新用户注册功能
+  user-registration-enabled: true
+  # 社交登录功能
+  social-login-enabled: true
+  # 消息通知功能
+  notification-enabled: true
+  # 分析功能
+  analytics-enabled: true
+  # 推荐功能
+  recommendation-enabled: true

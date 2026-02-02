@@ -1,0 +1,82 @@
+spring:
+  profiles: prod
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://prod-db:3306/travel_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:password}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  redis:
+    host: ${REDIS_HOST:prod-redis}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:password}
+    timeout: 5000
+    lettuce:
+      pool:
+        min-idle: 10
+        max-idle: 200
+        max-active: 500
+        max-wait: 10000
+    database: 0
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  type-aliases-package: com.example.yoyo_data.common.pojo
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  level:
+    root: WARN
+    com.example.yoyo_data: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/yoyo_data.log
+    max-size: 100MB
+    max-history: 30
+    total-size-cap: 10GB
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+      total-size-cap: 10GB
+
+kafka:
+  bootstrap-servers: ${KAFKA_BROKERS:prod-kafka:9092}
+  producer:
+    retries: 5
+    acks: all
+    batch-size: 32768
+    compression-type: snappy
+    buffer-memory: 67108864
+    properties.linger.ms: 100
+  consumer:
+    group-id: yoyo_data_prod_group
+    enable-auto-commit: false
+    auto-commit-interval-ms: 1000
+    max-poll-records: 500
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:https://prod-minio:9000}
+  accessKey: ${MINIO_ACCESS_KEY:minioadmin}
+  secretKey: ${MINIO_SECRET_KEY:minioadmin}
+  bucketName: yoyo-data-prod
+  secure: true
+  connect-timeout: 30000
+  write-timeout: 30000
+  read-timeout: 30000
+
+# 生产环境不显示SQL语句
+spring.jpa.show-sql: false
