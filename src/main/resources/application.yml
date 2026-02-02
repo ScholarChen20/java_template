@@ -4,6 +4,7 @@ spring:
     url: jdbc:mysql://localhost:3306/your_database_name?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: your_username
     password: your_password
+
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
   type-aliases-package: com.example.demo.entity
