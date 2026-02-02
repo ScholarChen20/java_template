@@ -1,16 +1,16 @@
 package com.example.yoyo_data.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.dto.request.UpdateUserProfileRequest;
 import com.example.yoyo_data.common.pojo.UserProfile;
 import com.example.yoyo_data.common.pojo.Users;
-
-import java.util.Map;
 
 /**
  * 用户服务接口
  * 处理用户信息相关业务逻辑
  */
-public interface UserService {
+public interface UserService extends IService<Users> {
 
     Result<?> getUserInfo(Long userId);
 
@@ -36,10 +36,9 @@ public interface UserService {
      * 更新当前用户信息
      *
      * @param token 当前用户的token
-     * @param params 更新参数，包含phone、avatar_url、bio等
      * @return 更新结果
      */
-    Result<Users> updateCurrentUser(String token, Map<String, Object> params);
+    Result<Users> updateCurrentUser(String token, Users users);
 
     /**
      * 获取当前用户档案
@@ -53,10 +52,10 @@ public interface UserService {
      * 更新当前用户档案
      *
      * @param token 当前用户的token
-     * @param params 更新参数，包含full_name、gender、birth_date、location、travel_preferences、visited_cities等
+     * @param requestBody 更新参数，包含full_name、gender、birth_date、location、travel_preferences、visited_cities等
      * @return 更新结果
      */
-    Result<UserProfile> updateCurrentUserProfile(String token, Map<String, Object> params);
+    Result<UserProfile> updateCurrentUserProfile(String token, UpdateUserProfileRequest requestBody);
 
     /**
      * 获取其他用户信息

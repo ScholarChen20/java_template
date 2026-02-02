@@ -15,6 +15,7 @@ public class CacheKeyManager {
      * 用户相关缓存键前缀
      */
     public static final String USER_PREFIX = "user:";
+    public static final String USER_TOKEN_PREFIX = "user:token:";
 
     /**
      * 产品相关缓存键前缀

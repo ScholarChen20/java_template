@@ -1,6 +1,7 @@
 package com.example.yoyo_data.controller;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.dto.request.UpdateUserProfileRequest;
 import com.example.yoyo_data.common.pojo.UserProfile;
 import com.example.yoyo_data.common.pojo.Users;
 import com.example.yoyo_data.service.UserService;
@@ -12,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
-import java.util.Map;
 
 /**
  * 用户控制器
@@ -46,20 +46,18 @@ public class UserController {
 
     /**
      * 更新当前用户信息
-     *
-     * @param params 更新参数，包含phone、avatar_url、bio等
      * @param request 请求对象，用于获取当前用户信息
      * @return 更新结果
      */
     @PutMapping("/me")
     @ApiOperation(value = "更新当前用户信息", notes = "更新当前登录用户的信息")
-    public Result<Users> updateCurrentUser(@ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<Users> updateCurrentUser(@ApiParam(value = "更新参数") @RequestBody Users users, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
             token = token.substring(7);
         }
-        return userService.updateCurrentUser(token, params);
+        return userService.updateCurrentUser(token, users);
     }
 
     /**
@@ -82,19 +80,19 @@ public class UserController {
     /**
      * 更新当前用户档案
      *
-     * @param params 更新参数，包含full_name、gender、birth_date、location、travel_preferences、visited_cities等
+     * @param requestBody 更新参数，包含full_name、gender、birth_date、location、travel_preferences、visited_cities等
      * @param request 请求对象，用于获取当前用户信息
      * @return 更新结果
      */
     @PutMapping("/me/profile")
     @ApiOperation(value = "更新当前用户档案", notes = "更新当前登录用户的档案信息")
-    public Result<UserProfile> updateCurrentUserProfile(@ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<UserProfile> updateCurrentUserProfile(@ApiParam(value = "更新参数") @RequestBody UpdateUserProfileRequest requestBody, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
             token = token.substring(7);
         }
-        return userService.updateCurrentUserProfile(token, params);
+        return userService.updateCurrentUserProfile(token, requestBody);
     }
 
     /**
