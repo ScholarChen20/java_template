@@ -41,7 +41,7 @@ spring:
       uri: mongodb://localhost:27017/test
 
 jwt:
-  secret: PbMVae4eN/1NmzCno0H2ubuJJEmcIQXuT6loO7JGEPg=
+  secret: TkyvN/nNzFSD7P9HknIAOjsGYi2xxzH6O2KXUGBbvTDoppofvlcspkENRR2KymyS3rlVBKRl60a9wJnk4IC4xw==
   expiration: 7200000
   token-expire: 7200
   token-type: Bearer

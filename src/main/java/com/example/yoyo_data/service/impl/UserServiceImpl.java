@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.example.yoyo_data.data.cache.CacheKeyManager.*;
+import static com.example.yoyo_data.data.cache.CacheKeyManager.CacheTTL.*;
 
 /**
  * 用户服务实现类
@@ -37,6 +38,8 @@ import static com.example.yoyo_data.data.cache.CacheKeyManager.*;
 @Slf4j
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements UserService {
+    @Autowired
+    private JwtUtils jwtUtils;
     @Autowired
     private RedisService redisService;
 
@@ -186,7 +189,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
             result.put("size", size);
 
             // 存入缓存，设置过期时间为10分钟
-            redisService.stringSetString(cacheKey, JSON.toJSONString(result), 600L);
+            redisService.stringSetString(cacheKey, JSON.toJSONString(result), TWO_HOURS);
 
             log.info("获取关注列表成功: userId={}, page={}, size={}", userId, page, size);
             return Result.success(result);
@@ -249,8 +252,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
             result.put("page", page);
             result.put("size", size);
 
-            // 存入缓存，设置过期时间为10分钟
-            redisService.stringSetString(cacheKey, JSON.toJSONString(result), 600L);
+            // 存入缓存，设置过期时间为60分钟
+            redisService.stringSetString(cacheKey, JSON.toJSONString(result), ONE_HOUR);
 
             log.info("获取粉丝列表成功: userId={}, page={}, size={}", userId, page, size);
             return Result.success(result);
@@ -307,11 +310,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
             jwtUser.setEmail(users.getEmail());
             jwtUser.setPhone(users.getPhone());
 
-            String newToken = JwtUtils.generateToken(jwtUser);
+            String newToken = jwtUtils.generateToken(jwtUser);
 
             // 5. 缓存用户信息到Redis（2小时过期）
             String cacheKey = USER_TOKEN_PREFIX + newToken;
-            redisService.objectSetObject(cacheKey, jwtUser, 86400L);
+            redisService.objectSetObject(cacheKey, jwtUser, SEVEN_DAYS);
 
              // 6. 删除原有的缓存
             redisService.delete(USER_TOKEN_PREFIX + token);
@@ -364,8 +367,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
                 return Result.success(null);
             }
 
-            // 7. 存入缓存，设置过期时间为1小时
-            redisService.stringSetString(profileCacheKey, JSON.toJSONString(profile), 7200L);
+            // 7. 存入缓存，设置过期时间为2小时
+            redisService.stringSetString(profileCacheKey, JSON.toJSONString(profile), TWO_HOURS);
 
             log.info("获取当前用户个人资料成功: token={}, userId={}", token, user.getId());
             return Result.success(profile);

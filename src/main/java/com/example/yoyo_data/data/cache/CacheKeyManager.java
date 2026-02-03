@@ -16,6 +16,10 @@ public class CacheKeyManager {
      */
     public static final String USER_PREFIX = "user:";
     /**
+     * 验证码缓存键前缀
+     */
+    public static final String CAPTCHA_KEY_PREFIX = "captcha:";
+    /**
      * 用户Token缓存键前缀
      */
     public static final String USER_TOKEN_PREFIX = "user:token:";
@@ -54,7 +58,7 @@ public class CacheKeyManager {
     public static final String CAPTCHA_PREFIX = "captcha:";
 
     /**
-     * 缓存默认过期时间（秒）
+     * 缓存默认过期时间（秒） 默认1小时
      */
     public static final long DEFAULT_TTL = 3600;
 
@@ -62,6 +66,14 @@ public class CacheKeyManager {
      * 缓存过期时间定义
      */
     public static class CacheTTL {
+        /**
+         * 1分钟
+         */
+        public static final long ONE_MINUTE = 60;
+        /**
+         * 5分钟
+         */
+        public static final long FIVE_MINUTES = 5 * 60;
         /**
          * 15分钟
          */

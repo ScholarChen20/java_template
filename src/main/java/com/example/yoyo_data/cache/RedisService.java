@@ -387,9 +387,9 @@ public interface RedisService {
      *
      * @param key                标识
      * @param value              值
-     * @param expireMilliSeconds 过期时间(毫秒)
+     * @param expireSeconds 过期时间(毫秒)
      */
-    void stringSetString(String key, String value, Long expireMilliSeconds);
+    void stringSetString(String key, String value, Long expireSeconds);
 
     /**
      * <p>

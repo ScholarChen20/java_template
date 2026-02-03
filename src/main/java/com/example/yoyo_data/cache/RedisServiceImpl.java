@@ -396,9 +396,9 @@ public class RedisServiceImpl implements RedisService {
      * {@inheritDoc}
      */
     @Override
-    public void stringSetString(String key, String value, Long expireMilliSeconds) {
-        if (expireMilliSeconds > 0) {
-            stringRedisTemplate.opsForValue().set(key, value, expireMilliSeconds, TimeUnit.MILLISECONDS);
+    public void stringSetString(String key, String value, Long expireSeconds) {
+        if (expireSeconds > 0) {
+            stringRedisTemplate.opsForValue().set(key, value, expireSeconds, TimeUnit.SECONDS);
         } else {
             stringRedisTemplate.opsForValue().set(key, value);
         }
@@ -426,7 +426,7 @@ public class RedisServiceImpl implements RedisService {
     @Override
     public void objectSetObject(String key, Object o, Long expireMilliSeconds) {
         if (expireMilliSeconds > 0) {
-            redisTemplate.opsForValue().set(key, o, expireMilliSeconds, TimeUnit.MILLISECONDS);
+            redisTemplate.opsForValue().set(key, o, expireMilliSeconds, TimeUnit.SECONDS);
         } else {
             redisTemplate.opsForValue().set(key, o);
         }

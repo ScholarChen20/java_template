@@ -16,7 +16,6 @@ import com.example.yoyo_data.utils.HashUtils;
 import com.example.yoyo_data.utils.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
+import static com.example.yoyo_data.data.cache.CacheKeyManager.CacheTTL.SEVEN_DAYS;
 import static com.example.yoyo_data.data.cache.CacheKeyManager.USER_TOKEN_PREFIX;
 import static com.example.yoyo_data.data.cache.CacheKeyManager.VERIFY_CODE_PREFIX;
 
@@ -161,15 +161,15 @@ public class AuthServiceImpl implements AuthService {
             jwtUser.setEmail(user.getEmail());
             jwtUser.setPhone(user.getPhone());
 
-            String token = JwtUtils.generateToken(jwtUser);
+            String token = jwtUtils.generateToken(jwtUser);
 
             // 5. 更新最后登录时间
             user.setLastLoginAt(LocalDateTime.now());
             userMapper.updateById(user);
 
-            // 6. 缓存用户信息到Redis（2小时过期）
+            // 6. 缓存用户信息到Redis（7天过期）
             String cacheKey = USER_TOKEN_PREFIX + token;
-            redisService.objectSetObject(cacheKey, jwtUser, 18500L);
+            redisService.objectSetObject(cacheKey, jwtUser, SEVEN_DAYS);
 
             // 7. 构建响应
             UserVO userVO = convertToUserVO(user);
@@ -240,7 +240,7 @@ public class AuthServiceImpl implements AuthService {
             String oldCacheKey = "user:token:" + token;
             String newCacheKey = "user:token:" + newToken;
             redisService.delete(oldCacheKey);
-            redisService.objectSetObject(newCacheKey, jwtUser, 3600L);
+            redisService.objectSetObject(newCacheKey, jwtUser, SEVEN_DAYS);
 
             // 5. 构建响应
             TokenResponse response = TokenResponse.builder()

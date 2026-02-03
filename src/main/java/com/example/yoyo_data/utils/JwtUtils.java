@@ -20,29 +20,44 @@ public class JwtUtils {
     private static final Logger log = LoggerFactory.getLogger(JwtUtils.class);
 
     @Value("${jwt.secret}")
-    private static String secret;
+    private String secret;
 
     @Value("${jwt.expiration:7200000}")
-    private static Long expiration;
+    private Long expiration;
 
-    private static SecretKey getSigningKey() {
+    // 缓存密钥，确保整个应用生命周期使用同一个密钥
+    private SecretKey cachedKey;
+
+    private SecretKey getSigningKey() {
+        if (cachedKey != null) {
+            return cachedKey;
+        }
+
         try {
             // 尝试使用配置的密钥
             SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
-            // 检查密钥大小是否足够
-            if (key.getEncoded().length * 8 >= 512) {
-                return key;
+            if (key.getEncoded().length >= 64) {
+                log.info("使用配置的 JWT 密钥");
+                cachedKey = key;
+                return cachedKey;
             }
-            // 密钥大小不够，使用默认的安全密钥
-            log.warn("配置的 JWT 密钥大小不够安全，使用默认的安全密钥");
+            log.warn("配置的 JWT 密钥大小不够安全（需要至少64字节），当前大小: {} 字节", key.getEncoded().length);
         } catch (Exception e) {
-            log.warn("使用配置的 JWT 密钥失败，使用默认的安全密钥", e);
+            log.warn("使用配置的 JWT 密钥失败", e);
         }
-        // 使用默认的安全密钥
-        return Keys.secretKeyFor(SignatureAlgorithm.HS512);
+
+        // 使用配置密钥的扩展版本作为固定密钥（确保一致性）
+        log.warn("使用配置密钥的扩展版本作为签名密钥");
+        String extendedSecret = secret;
+        // 如果密钥不够长，重复拼接直到满足长度要求
+        while (extendedSecret.getBytes().length < 64) {
+            extendedSecret += secret;
+        }
+        cachedKey = Keys.hmacShaKeyFor(extendedSecret.substring(0, 64).getBytes());
+        return cachedKey;
     }
 
-    public static String generateToken(JwtUserDTO jwtUser) {
+    public String generateToken(JwtUserDTO jwtUser) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", jwtUser.getId());
         claims.put("username", jwtUser.getUsername());
@@ -52,7 +67,7 @@ public class JwtUtils {
         return generateToken(claims, jwtUser.getUsername());
     }
 
-    private static String generateToken(Map<String, Object> claims, String subject) {
+    private String generateToken(Map<String, Object> claims, String subject) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 

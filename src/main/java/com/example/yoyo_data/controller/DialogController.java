@@ -1,6 +1,8 @@
 package com.example.yoyo_data.controller;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.dto.DialogSessionDTO;
+import com.example.yoyo_data.dto.PageResponseDTO;
 import com.example.yoyo_data.service.DialogService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -34,7 +36,7 @@ public class DialogController {
      */
     @PostMapping
     @ApiOperation(value = "创建对话", notes = "创建新的对话")
-    public Result<Map<String, Object>> createDialog(@ApiParam(value = "创建对话参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<DialogSessionDTO> createDialog(@ApiParam(value = "创建对话参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -56,7 +58,7 @@ public class DialogController {
      */
     @GetMapping
     @ApiOperation(value = "获取对话列表", notes = "获取当前用户的对话列表")
-    public Result<Map<String, Object>> getDialogList(
+    public Result<PageResponseDTO<DialogSessionDTO>> getDialogList(
             @ApiParam(value = "页码", defaultValue = "1") @RequestParam(defaultValue = "1") Integer page,
             @ApiParam(value = "每页数量", defaultValue = "20") @RequestParam(defaultValue = "20") Integer size,
             @ApiParam(value = "类型") @RequestParam(required = false) String type,
@@ -80,7 +82,7 @@ public class DialogController {
      */
     @GetMapping("/{id}")
     @ApiOperation(value = "获取对话详情", notes = "根据对话ID获取对话详情")
-    public Result<Map<String, Object>> getDialogDetail(@ApiParam(value = "对话ID") @PathVariable Long id, HttpServletRequest request) {
+    public Result<DialogSessionDTO> getDialogDetail(@ApiParam(value = "对话ID") @PathVariable Long id, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -99,7 +101,7 @@ public class DialogController {
      */
     @PostMapping("/{id}/messages")
     @ApiOperation(value = "发送消息", notes = "向对话发送消息")
-    public Result<?> sendMessage(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "发送消息参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<DialogSessionDTO.MessageDTO> sendMessage(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "发送消息参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -121,7 +123,7 @@ public class DialogController {
      */
     @GetMapping("/{id}/messages")
     @ApiOperation(value = "获取消息列表", notes = "获取对话的消息列表")
-    public Result<?> getMessageList(
+    public Result<PageResponseDTO<DialogSessionDTO.MessageDTO>> getMessageList(
             @ApiParam(value = "对话ID") @PathVariable Long id,
             @ApiParam(value = "页码", defaultValue = "1") @RequestParam(defaultValue = "1") Integer page,
             @ApiParam(value = "每页数量", defaultValue = "50") @RequestParam(defaultValue = "50") Integer size,
@@ -145,7 +147,7 @@ public class DialogController {
      */
     @PutMapping("/{id}/read-status")
     @ApiOperation(value = "更新消息状态", notes = "更新对话的消息阅读状态")
-    public Result<Map<String, Object>> updateMessageStatus(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<DialogSessionDTO> updateMessageStatus(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
@@ -164,7 +166,7 @@ public class DialogController {
      */
     @PutMapping("/{id}/archive")
     @ApiOperation(value = "归档/取消归档对话", notes = "归档或取消归档对话")
-    public Result<Map<String, Object>> archiveDialog(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
+    public Result<DialogSessionDTO> archiveDialog(@ApiParam(value = "对话ID") @PathVariable Long id, @ApiParam(value = "更新参数") @RequestBody Map<String, Object> params, HttpServletRequest request) {
         // 从请求头获取token
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
