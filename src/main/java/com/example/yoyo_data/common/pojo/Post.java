@@ -46,6 +46,9 @@ public class Post implements Serializable {
     @TableField("trip_plan_id")
     private String tripPlanId;
 
+    @TableField("category")
+    private String category;
+
     @TableField("status")
     private String status;
 

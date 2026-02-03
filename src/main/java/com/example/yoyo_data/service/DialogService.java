@@ -1,6 +1,8 @@
 package com.example.yoyo_data.service;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.dto.DialogSessionDTO;
+import com.example.yoyo_data.dto.PageResponseDTO;
 
 import java.util.Map;
 
@@ -15,7 +17,7 @@ public interface DialogService {
      * @param params 创建对话参数
      * @return 创建结果
      */
-    Result<Map<String, Object>> createDialog(String token, Map<String, Object> params);
+    Result<DialogSessionDTO> createDialog(String token, Map<String, Object> params);
 
     /**
      * 获取对话列表
@@ -28,7 +30,7 @@ public interface DialogService {
      * @param sort 排序方式
      * @return 对话列表
      */
-    Result<Map<String, Object>> getDialogList(String token, Integer page, Integer size, String type, String status, String sort);
+    Result<PageResponseDTO<DialogSessionDTO>> getDialogList(String token, Integer page, Integer size, String type, String status, String sort);
 
     /**
      * 获取对话详情
@@ -37,7 +39,7 @@ public interface DialogService {
      * @param token 请求token
      * @return 对话详情
      */
-    Result<Map<String, Object>> getDialogDetail(Long dialogId, String token);
+    Result<DialogSessionDTO> getDialogDetail(Long dialogId, String token);
 
     /**
      * 发送消息
@@ -47,7 +49,7 @@ public interface DialogService {
      * @param params 发送消息参数
      * @return 发送结果
      */
-    Result<?> sendMessage(Long dialogId, String token, Map<String, Object> params);
+    Result<DialogSessionDTO.MessageDTO> sendMessage(Long dialogId, String token, Map<String, Object> params);
 
     /**
      * 获取消息列表
@@ -59,7 +61,7 @@ public interface DialogService {
      * @param before 分页标记
      * @return 消息列表
      */
-    Result<?> getMessageList(Long dialogId, String token, Integer page, Integer size, Long before);
+    Result<PageResponseDTO<DialogSessionDTO.MessageDTO>> getMessageList(Long dialogId, String token, Integer page, Integer size, Long before);
 
     /**
      * 更新消息状态
@@ -69,7 +71,7 @@ public interface DialogService {
      * @param params 更新参数
      * @return 更新结果
      */
-    Result<Map<String, Object>> updateMessageStatus(Long dialogId, String token, Map<String, Object> params);
+    Result<DialogSessionDTO> updateMessageStatus(Long dialogId, String token, Map<String, Object> params);
 
     /**
      * 归档/取消归档对话
@@ -79,5 +81,5 @@ public interface DialogService {
      * @param params 更新参数
      * @return 更新结果
      */
-    Result<Map<String, Object>> archiveDialog(Long dialogId, String token, Map<String, Object> params);
+    Result<DialogSessionDTO> archiveDialog(Long dialogId, String token, Map<String, Object> params);
 }

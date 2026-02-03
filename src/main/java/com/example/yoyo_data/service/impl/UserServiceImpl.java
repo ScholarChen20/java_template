@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.yoyo_data.cache.RedisService;
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.dto.JwtUserDTO;
 import com.example.yoyo_data.common.dto.request.UpdateUserProfileRequest;
 import com.example.yoyo_data.common.pojo.Follow;
 import com.example.yoyo_data.common.pojo.UserProfile;
@@ -13,17 +14,22 @@ import com.example.yoyo_data.mapper.FollowMapper;
 import com.example.yoyo_data.mapper.UserMapper;
 import com.example.yoyo_data.mapper.UserProfileMapper;
 import com.example.yoyo_data.service.UserService;
+import com.example.yoyo_data.utils.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import static com.example.yoyo_data.data.cache.CacheKeyManager.USER_TOKEN_PREFIX;
+import static com.example.yoyo_data.data.cache.CacheKeyManager.*;
 
 /**
  * 用户服务实现类
@@ -31,7 +37,6 @@ import static com.example.yoyo_data.data.cache.CacheKeyManager.USER_TOKEN_PREFIX
 @Slf4j
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements UserService {
-
     @Autowired
     private RedisService redisService;
 
@@ -44,44 +49,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     @Autowired
     private FollowMapper followMapper;
 
-    @Override
-    public Result<?> getUserInfo(Long userId) {
-        try {
-            // 从数据库获取用户信息
-            Users user = userMapper.selectById(userId);
-            if (user == null) {
-                return Result.error("用户不存在");
-            }
-            
-
-            log.info("获取用户信息成功: userId={}", userId);
-            return Result.success(user);
-
-        } catch (Exception e) {
-            log.error("获取用户信息失败", e);
-            return Result.error("获取用户信息失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public Result<?> updateUserInfo(Long userId, String username, String bio, String avatarUrl) {
-        try {
-            // 模拟更新用户信息
-            Map<String, Object> updatedInfo = new HashMap<>();
-            updatedInfo.put("id", userId);
-            updatedInfo.put("username", username);
-            updatedInfo.put("bio", bio);
-            updatedInfo.put("avatarUrl", avatarUrl);
-            updatedInfo.put("updatedAt", System.currentTimeMillis());
-
-            log.info("更新用户信息成功: userId={}, username={}", userId, username);
-            return Result.success(updatedInfo);
-
-        } catch (Exception e) {
-            log.error("更新用户信息失败", e);
-            return Result.error("更新用户信息失败: " + e.getMessage());
-        }
-    }
 
     @Override
     public Result<?> toggleFollow(Long userId, Long targetUserId) {
@@ -92,15 +59,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
             }
 
             // 检查是否已经关注
-            Follow follow = new Follow();
-            follow.setUserId(userId);
-            follow.setTargetUserId(targetUserId);
-            follow.setCreatedAt(java.time.LocalDateTime.now());
-
             Follow existingFollow = followMapper.selectOne(
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Follow>()
-                            .eq(Follow::getUserId, userId)
-                            .eq(Follow::getTargetUserId, targetUserId)
+                            .eq(Follow::getFollowerId, userId)
+                            .eq(Follow::getFollowingId, targetUserId)
             );
 
             boolean isFollowing = existingFollow != null;
@@ -108,34 +70,37 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
                 // 已关注，取消关注
                 followMapper.delete(
                         new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Follow>()
-                                .eq(Follow::getUserId, userId)
-                                .eq(Follow::getTargetUserId, targetUserId)
+                                .eq(Follow::getFollowerId, userId)
+                                .eq(Follow::getFollowingId, targetUserId)
                 );
             } else {
                 // 未关注，添加关注
+                Follow follow = new Follow();
+                follow.setFollowerId(userId);
+                follow.setFollowingId(targetUserId);
+                follow.setCreatedAt(java.time.LocalDateTime.now());
                 followMapper.insert(follow);
             }
 
             // 计算关注数和粉丝数
-            int followCount = followMapper.selectCount(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Follow>()
-                            .eq(Follow::getUserId, userId)
-            );
+            int followCount = Math.toIntExact(followMapper.selectCount(
+                    new LambdaQueryWrapper<Follow>()
+                            .eq(Follow::getFollowerId, userId)
+            ));
 
-            int followerCount = followMapper.selectCount(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Follow>()
-                            .eq(Follow::getTargetUserId, targetUserId)
-            );
+            int followerCount = Math.toIntExact(followMapper.selectCount(
+                    new LambdaQueryWrapper<Follow>()
+                            .eq(Follow::getFollowingId, targetUserId)
+            ));
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("userId", userId);
-            result.put("targetUserId", targetUserId);
-            result.put("isFollowing", !isFollowing);
-            result.put("followCount", followCount);
-            result.put("followerCount", followerCount);
+            Follow follow = new Follow();
+            follow.setId(userId);
+            follow.setFollowerId(userId);
+            follow.setFollowingId(targetUserId);
+            follow.setCreatedAt(LocalDateTime.now());
 
             log.info("{}关注成功: userId={}, targetUserId={}", isFollowing ? "取消" : "", userId, targetUserId);
-            return Result.success(result);
+            return Result.success(follow);
 
         } catch (Exception e) {
             log.error("关注操作失败", e);
@@ -148,8 +113,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
         try {
             // 检查是否已经关注
             Follow existingFollow = followMapper.selectOne(new LambdaQueryWrapper<Follow>()
-                            .eq(Follow::getUserId, userId)
-                            .eq(Follow::getTargetUserId, targetUserId)
+                            .eq(Follow::getFollowerId, userId)
+                            .eq(Follow::getFollowingId, targetUserId)
             );
 
             boolean isFollowing = existingFollow != null;
@@ -171,23 +136,57 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     @Override
     public Result<?> getFollowList(Long userId, Integer page, Integer size) {
         try {
-            // 模拟数据
+            // 缓存键
+            String cacheKey = USER_FOLLOWER_LIST_PREFIX + userId + ":" + page + ":" + size;
+
+            // 尝试从缓存获取
+            String cachedFollowList = redisService.stringGetString(cacheKey);
+            if (cachedFollowList != null) {
+                Map<String, Object> result = JSON.parseObject(cachedFollowList, Map.class);
+                log.info("从缓存获取关注列表成功: userId={}, page={}, size={}", userId, page, size);
+                return Result.success(result);
+            }
+
+            // 计算分页参数
+            int offset = (page - 1) * size;
+
+            // 从数据库获取关注列表
+            List<Follow> follows = followMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Follow>()
+                            .eq(Follow::getFollowerId, userId)
+                            .orderByDesc(Follow::getCreatedAt)
+                            .last("LIMIT " + offset + ", " + size)
+            );
+
+            // 计算总数
+            int total = Math.toIntExact(followMapper.selectCount(
+                    new LambdaQueryWrapper<Follow>()
+                            .eq(Follow::getFollowerId, userId)
+            ));
+
+            // 构建响应数据
             List<Map<String, Object>> followList = new ArrayList<>();
-            for (int i = 0; i < size; i++) {
-                Map<String, Object> follow = new HashMap<>();
-                follow.put("id", (long) (i + 1));
-                follow.put("username", "用户" + (i + 1));
-                follow.put("avatarUrl", "https://example.com/avatar" + (i + 1) + ".jpg");
-                follow.put("bio", "这是用户" + (i + 1) + "的个人简介。");
-                follow.put("followedAt", System.currentTimeMillis() - i * 86400000);
-                followList.add(follow);
+            for (Follow follow : follows) {
+                Users followedUser = userMapper.selectById(follow.getFollowingId());
+                if (followedUser != null) {
+                    Map<String, Object> followInfo = new HashMap<>();
+                    followInfo.put("id", followedUser.getId());
+                    followInfo.put("username", followedUser.getUserName());
+                    followInfo.put("avatarUrl", followedUser.getAvatarUrl());
+                    followInfo.put("bio", followedUser.getBio());
+                    followInfo.put("followedAt", follow.getCreatedAt());
+                    followList.add(followInfo);
+                }
             }
 
             Map<String, Object> result = new HashMap<>();
             result.put("followList", followList);
-            result.put("total", 100);
+            result.put("total", total);
             result.put("page", page);
             result.put("size", size);
+
+            // 存入缓存，设置过期时间为10分钟
+            redisService.stringSetString(cacheKey, JSON.toJSONString(result), 600L);
 
             log.info("获取关注列表成功: userId={}, page={}, size={}", userId, page, size);
             return Result.success(result);
@@ -201,23 +200,57 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     @Override
     public Result<?> getFollowerList(Long userId, Integer page, Integer size) {
         try {
-            // 模拟数据
+            // 缓存键
+            String cacheKey = USER_FOLLOWER_LIST_PREFIX + userId + ":" + page + ":" + size;
+
+            // 尝试从缓存获取
+            String cachedFollowerList = redisService.stringGetString(cacheKey);
+            if (cachedFollowerList != null) {
+                Map<String, Object> result = JSON.parseObject(cachedFollowerList, Map.class);
+                log.info("从缓存获取粉丝列表成功: userId={}, page={}, size={}", userId, page, size);
+                return Result.success(result);
+            }
+
+            // 计算分页参数
+            int offset = (page - 1) * size;
+
+            // 从数据库获取粉丝列表
+            List<Follow> follows = followMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Follow>()
+                            .eq(Follow::getFollowingId, userId)
+                            .orderByDesc(Follow::getCreatedAt)
+                            .last("LIMIT " + offset + ", " + size)
+            );
+
+            // 计算总数
+            int total = Math.toIntExact(followMapper.selectCount(
+                    new LambdaQueryWrapper<Follow>()
+                            .eq(Follow::getFollowingId, userId)
+            ));
+
+            // 构建响应数据
             List<Map<String, Object>> followerList = new ArrayList<>();
-            for (int i = 0; i < size; i++) {
-                Map<String, Object> follower = new HashMap<>();
-                follower.put("id", (long) (i + 101));
-                follower.put("username", "粉丝" + (i + 1));
-                follower.put("avatarUrl", "https://example.com/avatar" + (i + 101) + ".jpg");
-                follower.put("bio", "这是粉丝" + (i + 1) + "的个人简介。");
-                follower.put("followedAt", System.currentTimeMillis() - i * 86400000);
-                followerList.add(follower);
+            for (Follow follow : follows) {
+                Users followerUser = userMapper.selectById(follow.getFollowerId());
+                if (followerUser != null) {
+                    Map<String, Object> followerInfo = new HashMap<>();
+                    followerInfo.put("id", followerUser.getId());
+                    followerInfo.put("username", followerUser.getUserName());
+                    followerInfo.put("avatarUrl", followerUser.getAvatarUrl());
+                    followerInfo.put("bio", followerUser.getBio());
+                    followerInfo.put("followedAt", follow.getCreatedAt());
+                    followerList.add(followerInfo);
+                }
             }
 
             Map<String, Object> result = new HashMap<>();
             result.put("followerList", followerList);
-            result.put("total", 200);
+            result.put("total", total);
             result.put("page", page);
             result.put("size", size);
+
+            // 存入缓存，设置过期时间为10分钟
+            redisService.stringSetString(cacheKey, JSON.toJSONString(result), 600L);
 
             log.info("获取粉丝列表成功: userId={}, page={}, size={}", userId, page, size);
             return Result.success(result);
@@ -232,7 +265,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     public Result<Users> getCurrentUser(String token) {
         try {
             // 1. 从redis中取出用户信息
-            String cacheKey = USER_TOKEN_PREFIX+ token;
+            String cacheKey = USER_TOKEN_PREFIX + token;
             String userStr  = redisService.stringGetString(cacheKey);
 
             // 2. 解析用户信息
@@ -249,10 +282,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     @Override
     public Result<Users> updateCurrentUser(String token, Users users) {
         try {
-            // 1. 验证用户信息字段是否合理
-            if (users == null || users.getId() == null) {
-                return Result.error("用户信息字段不能为空");
+            // 1. 验证token的userId与当前用户id一致
+            String userStr = redisService.stringGetString(USER_TOKEN_PREFIX+ token);
+            Users currentUser = JSON.parseObject(userStr, Users.class);
+            if (!currentUser.getId().equals(users.getId())) {
+                return Result.error("用户id字段不一致");
             }
+
+            // 2. 验证用户信息字段是否合理
             if (users.getUserName() == null || users.getUserName().isEmpty()) {
                 return Result.error("用户名不能为空");
             }
@@ -260,11 +297,27 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
                 return Result.error("邮箱不能为空");
             }
 
-            // 2. 更新数据到数据库
+            // 3. 更新数据到数据库
             baseMapper.updateById(users);
 
+            // 4. 重新生成 token
+            JwtUserDTO jwtUser = new JwtUserDTO();
+            jwtUser.setId(users.getId().longValue());
+            jwtUser.setUsername(users.getUserName());
+            jwtUser.setEmail(users.getEmail());
+            jwtUser.setPhone(users.getPhone());
 
-            log.info("更新当前用户信息成功: token={}, username={}", token, users.getUserName());
+            String newToken = JwtUtils.generateToken(jwtUser);
+
+            // 5. 缓存用户信息到Redis（2小时过期）
+            String cacheKey = USER_TOKEN_PREFIX + newToken;
+            redisService.objectSetObject(cacheKey, jwtUser, 86400L);
+
+             // 6. 删除原有的缓存
+            redisService.delete(USER_TOKEN_PREFIX + token);
+
+
+            log.info("更新当前用户信息成功: token={}, username={}", newToken, users.getUserName());
             return Result.success(users);
 
         } catch (Exception e) {
@@ -276,16 +329,45 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     @Override
     public Result<UserProfile> getCurrentUserProfile(String token) {
         try {
-            // 模拟当前用户个人资料
-            UserProfile profile = UserProfile.builder()
-                    .id(1L)
-                    .userId(1L)
-                    .gender("男")
-                    .birthDate(LocalDate.of(1990, 1, 1))
-                    .location("北京市")
-                    .build();
+            // 1. 从redis中取出用户信息
+            String cacheKey = USER_TOKEN_PREFIX + token;
+            String userStr = redisService.stringGetString(cacheKey);
+            if (userStr == null) {
+                return Result.error("用户未登录或token已过期");
+            }
 
-            log.info("获取当前用户个人资料成功: token={}", token);
+            // 2. 解析用户信息
+            Users user = JSON.parseObject(userStr, Users.class);
+            if (user == null) {
+                return Result.error("无法获取用户信息");
+            }
+
+            // 3. 缓存键
+            String profileCacheKey = USER_PROFILE_PREFIX + user.getId();
+
+            // 4. 尝试从缓存获取用户档案
+            String cachedProfile = redisService.stringGetString(profileCacheKey);
+            if (cachedProfile != null) {
+                UserProfile profile = JSON.parseObject(cachedProfile, UserProfile.class);
+                log.info("从缓存获取用户档案成功: userId={}", user.getId());
+                return Result.success(profile);
+            }
+
+            // 5. 从数据库获取用户档案
+            UserProfile profile = userProfileMapper.selectOne(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserProfile>()
+                            .eq(UserProfile::getUserId, user.getId())
+            );
+
+            // 6. 如果用户档案不存在，返回空结果
+            if (profile == null) {
+                return Result.success(null);
+            }
+
+            // 7. 存入缓存，设置过期时间为1小时
+            redisService.stringSetString(profileCacheKey, JSON.toJSONString(profile), 7200L);
+
+            log.info("获取当前用户个人资料成功: token={}, userId={}", token, user.getId());
             return Result.success(profile);
 
         } catch (Exception e) {
@@ -298,8 +380,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     public Result<UserProfile> updateCurrentUserProfile(String token, UpdateUserProfileRequest requestBody) {
         try {
             // 1. 从redis中取出用户信息
-            String cacheKey = USER_TOKEN_PREFIX + token;
-            String userStr = redisService.stringGetString(cacheKey);
+            String userStr = redisService.stringGetString(USER_TOKEN_PREFIX + token);
             if (userStr == null) {
                 return Result.error("用户未登录或token已过期");
             }
@@ -340,21 +421,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
             if (requestBody.getLocation() != null) {
                 profile.setLocation(requestBody.getLocation());
             }
-            if (requestBody.getBio() != null) {
-                profile.setBio(requestBody.getBio());
-            }
-            if (requestBody.getAvatarUrl() != null) {
-                profile.setAvatarUrl(requestBody.getAvatarUrl());
-            }
-            if (requestBody.getWebsite() != null) {
-                profile.setWebsite(requestBody.getWebsite());
-            }
-            if (requestBody.getOccupation() != null) {
-                profile.setOccupation(requestBody.getOccupation());
-            }
-            if (requestBody.getEducation() != null) {
-                profile.setEducation(requestBody.getEducation());
-            }
             if (requestBody.getTravelPreferences() != null) {
                 profile.setTravelPreferences(requestBody.getTravelPreferences());
             }
@@ -382,18 +448,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     @Override
     public Result<Users> getUserById(Long id) {
         try {
-            // 模拟根据ID获取用户
-            Users user = Users.builder()
-                    .id(id)
-                    .userName("用户" + id)
-                    .email("user" + id + "@example.com")
-                    .phone("1380013800" + (id % 10))
-                    .avatarUrl("https://example.com/avatar" + id + ".jpg")
-                    .bio("这是用户" + id + "的个人简介。")
-                    .role("ROLE_USER")
-                    .isActive(true)
-                    .isVerified(true)
-                    .build();
+            // 从数据库获取用户信息
+            Users user = userMapper.selectById(id);
+            if (user == null) {
+                return Result.error("用户不存在");
+            }
 
             log.info("根据ID获取用户成功: id={}", id);
             return Result.success(user);

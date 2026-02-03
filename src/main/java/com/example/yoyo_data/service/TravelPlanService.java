@@ -1,6 +1,8 @@
 package com.example.yoyo_data.service;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.dto.PageResponseDTO;
+import com.example.yoyo_data.dto.TravelPlanDTO;
 
 /**
  * 旅行计划服务接口
@@ -14,7 +16,7 @@ public interface TravelPlanService {
      * @param size 每页大小
      * @return 旅行计划列表
      */
-    Result<?> getTravelPlanList(Long userId, Integer page, Integer size);
+    Result<PageResponseDTO<TravelPlanDTO>> getTravelPlanList(Long userId, Integer page, Integer size);
 
     /**
      * 获取旅行计划详情
@@ -22,7 +24,7 @@ public interface TravelPlanService {
      * @param planId 旅行计划ID
      * @return 旅行计划详情
      */
-    Result<?> getTravelPlanDetail(Long planId);
+    Result<TravelPlanDTO> getTravelPlanDetail(Long planId);
 
     /**
      * 创建旅行计划
@@ -35,7 +37,7 @@ public interface TravelPlanService {
      * @param endDate 结束日期
      * @return 创建结果
      */
-    Result<?> createTravelPlan(Long userId, String title, String description, String destination, String startDate, String endDate);
+    Result<TravelPlanDTO> createTravelPlan(Long userId, String title, String description, String destination, String startDate, String endDate);
 
     /**
      * 更新旅行计划
@@ -49,7 +51,7 @@ public interface TravelPlanService {
      * @param endDate 结束日期
      * @return 更新结果
      */
-    Result<?> updateTravelPlan(Long planId, Long userId, String title, String description, String destination, String startDate, String endDate);
+    Result<TravelPlanDTO> updateTravelPlan(Long planId, Long userId, String title, String description, String destination, String startDate, String endDate);
 
     /**
      * 删除旅行计划
@@ -57,5 +59,5 @@ public interface TravelPlanService {
      * @param planId 旅行计划ID
      * @return 删除结果
      */
-    Result<?> deleteTravelPlan(Long planId);
+    Result<String> deleteTravelPlan(Long planId);
 }

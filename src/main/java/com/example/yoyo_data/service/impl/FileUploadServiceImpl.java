@@ -1,6 +1,7 @@
 package com.example.yoyo_data.service.impl;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.dto.response.FileUploadResponse;
 import com.example.yoyo_data.infrastructure.config.properties.MinIOProperties;
 import com.example.yoyo_data.service.FileUploadService;
 import io.minio.MinioClient;
@@ -11,8 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -29,7 +28,7 @@ public class FileUploadServiceImpl implements FileUploadService {
     private MinIOProperties minIOProperties;
 
     @Override
-    public Result<Map<String, Object>> uploadFile(MultipartFile file, String bucketName, String objectName) {
+    public Result<FileUploadResponse> uploadFile(MultipartFile file, String bucketName, String objectName) {
         try {
             // 1. 检查参数
             if (file == null || file.isEmpty()) {
@@ -70,15 +69,15 @@ public class FileUploadServiceImpl implements FileUploadService {
             String presignedUrl = minioClient.presignedGetObject(bucketName, objectName, 7 * 24 * 3600);
 
             // 6. 构建响应
-            Map<String, Object> result = new HashMap<>();
-            result.put("bucketName", bucketName);
-            result.put("objectName", objectName);
-            result.put("fileUrl", presignedUrl);
-            result.put("fileSize", file.getSize());
-            result.put("contentType", file.getContentType());
+            FileUploadResponse response = new FileUploadResponse();
+            response.setBucketName(bucketName);
+            response.setObjectName(objectName);
+            response.setFileUrl(presignedUrl);
+            response.setFileSize(file.getSize());
+            response.setContentType(file.getContentType());
 
             log.info("文件上传成功: bucketName={}, objectName={}, fileSize={}", bucketName, objectName, file.getSize());
-            return Result.success(result);
+            return Result.success(response);
 
         } catch (Exception e) {
             log.error("文件上传失败", e);
@@ -115,7 +114,7 @@ public class FileUploadServiceImpl implements FileUploadService {
     }
 
     @Override
-    public Result<Map<String, Object>> getFileUrl(String bucketName, String objectName, Integer expiry) {
+    public Result<FileUploadResponse> getFileUrl(String bucketName, String objectName, Integer expiry) {
         try {
             // 1. 检查参数
             if (bucketName == null || bucketName.isEmpty()) {
@@ -137,14 +136,14 @@ public class FileUploadServiceImpl implements FileUploadService {
             String presignedUrl = minioClient.presignedGetObject(bucketName, objectName, expiry);
 
             // 4. 构建响应
-            Map<String, Object> result = new HashMap<>();
-            result.put("bucketName", bucketName);
-            result.put("objectName", objectName);
-            result.put("presignedUrl", presignedUrl);
-            result.put("expiry", expiry);
+            FileUploadResponse response = new FileUploadResponse();
+            response.setBucketName(bucketName);
+            response.setObjectName(objectName);
+            response.setFileUrl(presignedUrl);
+            response.setExpiry(expiry);
 
             log.info("获取文件URL成功: bucketName={}, objectName={}, expiry={}", bucketName, objectName, expiry);
-            return Result.success(result);
+            return Result.success(response);
 
         } catch (Exception e) {
             log.error("获取文件URL失败", e);

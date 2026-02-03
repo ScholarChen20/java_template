@@ -1,6 +1,7 @@
 package com.example.yoyo_data.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.example.yoyo_data.cache.RedisService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.JwtUserDTO;
 import com.example.yoyo_data.common.dto.request.*;
@@ -24,6 +25,9 @@ import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
+import static com.example.yoyo_data.data.cache.CacheKeyManager.USER_TOKEN_PREFIX;
+import static com.example.yoyo_data.data.cache.CacheKeyManager.VERIFY_CODE_PREFIX;
+
 /**
  * 认证服务实现类
  * 实现用户登录、注册、刷新token等认证相关业务逻辑
@@ -42,7 +46,7 @@ public class AuthServiceImpl implements AuthService {
     private JwtUtils jwtUtils;
 
     @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    private RedisService redisService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -157,15 +161,15 @@ public class AuthServiceImpl implements AuthService {
             jwtUser.setEmail(user.getEmail());
             jwtUser.setPhone(user.getPhone());
 
-            String token = jwtUtils.generateToken(jwtUser);
+            String token = JwtUtils.generateToken(jwtUser);
 
             // 5. 更新最后登录时间
             user.setLastLoginAt(LocalDateTime.now());
             userMapper.updateById(user);
 
             // 6. 缓存用户信息到Redis（2小时过期）
-            String cacheKey = "user:token:" + token;
-            redisTemplate.opsForValue().set(cacheKey, jwtUser, 7, TimeUnit.DAYS);
+            String cacheKey = USER_TOKEN_PREFIX + token;
+            redisService.objectSetObject(cacheKey, jwtUser, 18500L);
 
             // 7. 构建响应
             UserVO userVO = convertToUserVO(user);
@@ -201,8 +205,8 @@ public class AuthServiceImpl implements AuthService {
             }
 
             // 2. 从Redis缓存中获取用户信息
-            String cacheKey = "user:token:" + token;
-            JwtUserDTO jwtUser = (JwtUserDTO) redisTemplate.opsForValue().get(cacheKey);
+            String cacheKey = USER_TOKEN_PREFIX + token;
+            JwtUserDTO jwtUser = redisService.getCacheObject(cacheKey);
             
             // 如果缓存中没有，从token中获取用户名并查询数据库
             if (jwtUser == null) {
@@ -235,8 +239,8 @@ public class AuthServiceImpl implements AuthService {
             // 4. 更新缓存
             String oldCacheKey = "user:token:" + token;
             String newCacheKey = "user:token:" + newToken;
-            redisTemplate.delete(oldCacheKey);
-            redisTemplate.opsForValue().set(newCacheKey, jwtUser, 2, TimeUnit.HOURS);
+            redisService.delete(oldCacheKey);
+            redisService.objectSetObject(newCacheKey, jwtUser, 3600L);
 
             // 5. 构建响应
             TokenResponse response = TokenResponse.builder()
@@ -266,12 +270,12 @@ public class AuthServiceImpl implements AuthService {
         try {
             if (token != null) {
                 // 1. 从缓存中删除用户信息
-                String cacheKey = "user:token:" + token;
-                redisTemplate.delete(cacheKey);
+                String cacheKey = USER_TOKEN_PREFIX + token;
+                redisService.delete(cacheKey);
 
                 // 2. 将token加入黑名单（设置过期时间为token的剩余有效期）
-                String blacklistKey = "blacklist:token:" + token;
-                redisTemplate.opsForValue().set(blacklistKey, "1", 7200, TimeUnit.SECONDS);
+                String blacklistKey = "blacklist:token";
+                redisService.setAddSetObject(blacklistKey, token);
 
                 log.info("用户登出成功");
             }
@@ -297,8 +301,8 @@ public class AuthServiceImpl implements AuthService {
             String code = String.format("%06d", (int) (Math.random() * 1000000));
 
             // 2. 缓存验证码（5分钟过期）
-            String cacheKey = "verify:code:" + request.getEmail() + ":" + request.getType();
-            redisTemplate.opsForValue().set(cacheKey, code, 300, TimeUnit.SECONDS);
+            String cacheKey = VERIFY_CODE_PREFIX + request.getEmail() + ":" + request.getType();
+            redisService.objectSetObject(cacheKey, code, 300L);
 
             // TODO: 3. 发送邮件（需要集成邮件服务）
             log.info("验证码已生成: email={}, type={}, code={}", request.getEmail(), request.getType(), code);
@@ -329,8 +333,8 @@ public class AuthServiceImpl implements AuthService {
     public Result<VerifyEmailResponse> verifyEmail(VerifyEmailRequest request) {
         try {
             // 1. 从缓存中获取验证码
-            String cacheKey = "verify:code:" + request.getEmail() + ":verify_email";
-            String cachedCode = (String) redisTemplate.opsForValue().get(cacheKey);
+            String cacheKey = VERIFY_CODE_PREFIX + request.getEmail() + ":verify_email";
+            String cachedCode = redisService.stringGetString(cacheKey);
 
             if (cachedCode == null) {
                 throw new BusinessException("验证码已过期，请重新获取");
@@ -355,7 +359,7 @@ public class AuthServiceImpl implements AuthService {
             userMapper.updateById(user);
 
             // 3. 删除验证码缓存
-            redisTemplate.delete(cacheKey);
+            redisService.delete(cacheKey);
 
             // 4. 构建响应
             VerifyEmailResponse response = VerifyEmailResponse.builder()

@@ -15,8 +15,19 @@ public class CacheKeyManager {
      * 用户相关缓存键前缀
      */
     public static final String USER_PREFIX = "user:";
+    /**
+     * 用户Token缓存键前缀
+     */
     public static final String USER_TOKEN_PREFIX = "user:token:";
-
+    /**
+     * 用户信息缓存键前缀
+     */
+    public static final String USER_PROFILE_PREFIX = "user:profile:";
+    /**
+     * 验证码缓存键前缀
+     */
+    public static final String VERIFY_CODE_PREFIX = "verify:code:";
+    public static final String USER_FOLLOWER_LIST_PREFIX = "user:follower:list:";
     /**
      * 产品相关缓存键前缀
      */

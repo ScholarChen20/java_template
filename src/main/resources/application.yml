@@ -3,6 +3,8 @@ spring:
     active: dev
   application:
     name: yoyo_data
+  main:
+    allow-bean-definition-overriding: true
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/travel_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
@@ -34,6 +36,9 @@ spring:
   web:
     resources:
       add-mappings: true
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/test
 
 jwt:
   secret: PbMVae4eN/1NmzCno0H2ubuJJEmcIQXuT6loO7JGEPg=

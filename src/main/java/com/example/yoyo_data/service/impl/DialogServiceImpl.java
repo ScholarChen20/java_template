@@ -1,14 +1,19 @@
 package com.example.yoyo_data.service.impl;
 
+import com.alibaba.fastjson.JSON;
+import com.example.yoyo_data.cache.RedisService;
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.document.DialogSession;
+import com.example.yoyo_data.dto.DialogSessionDTO;
+import com.example.yoyo_data.dto.PageResponseDTO;
+import com.example.yoyo_data.repository.DialogSessionRepository;
 import com.example.yoyo_data.service.DialogService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 对话服务实现类
@@ -17,9 +22,18 @@ import java.util.Map;
 @Service
 public class DialogServiceImpl implements DialogService {
 
+    @Autowired
+    private DialogSessionRepository dialogSessionRepository;
+
+    @Autowired
+    private RedisService redisService;
+
+    private static final String DIALOG_CACHE_PREFIX = "dialog:";
+    private static final String DIALOG_LIST_CACHE_PREFIX = "dialog:list:";
+    private static final long CACHE_EXPIRE_TIME = 3600000L; // 1小时（毫秒）
+
     /**
      * 从token中获取用户ID的辅助方法
-     * 实际项目中应该使用JWT工具类解析token
      */
     private Long getUserIdFromToken(String token) {
         // 模拟从token中获取用户ID
@@ -28,32 +42,45 @@ public class DialogServiceImpl implements DialogService {
     }
 
     @Override
-    public Result<Map<String, Object>> createDialog(String token, Map<String, Object> params) {
+    public Result<DialogSessionDTO> createDialog(String token, Map<String, Object> params) {
         try {
-            // 从token中获取用户ID
             Long userId = getUserIdFromToken(token);
             if (userId == null) {
                 return Result.error("无效的token");
             }
 
-            // 获取对方用户ID
-            Long recipientId = (Long) params.get("recipient_id");
+            Long recipientId = ((Number) params.get("recipient_id")).longValue();
             if (recipientId == null) {
                 return Result.error("缺少recipient_id参数");
             }
 
-            // 模拟创建对话
-            Map<String, Object> dialog = new HashMap<>();
-            dialog.put("id", System.currentTimeMillis());
-            dialog.put("user_id", userId);
-            dialog.put("recipient_id", recipientId);
-            dialog.put("type", params.getOrDefault("type", "private"));
-            dialog.put("metadata", params.get("metadata"));
-            dialog.put("created_at", System.currentTimeMillis());
-            dialog.put("updated_at", System.currentTimeMillis());
+            // 检查是否已存在对话
+            Optional<DialogSession> existingDialog = dialogSessionRepository.findByUserIdAndRecipientId(userId, recipientId);
+            if (existingDialog.isPresent()) {
+                return Result.success(convertToDTO(existingDialog.get()));
+            }
+
+            // 创建新对话
+            DialogSession dialogSession = DialogSession.builder()
+                    .userId(userId)
+                    .recipientId(recipientId)
+                    .type((String) params.getOrDefault("type", "private"))
+                    .status("active")
+                    .unreadCount(0)
+                    .metadata((Map<String, Object>) params.get("metadata"))
+                    .messages(new ArrayList<>())
+                    .createdAt(new Date())
+                    .updatedAt(new Date())
+                    .isArchived(false)
+                    .build();
+
+            dialogSession = dialogSessionRepository.save(dialogSession);
+
+            // 清除列表缓存
+            clearDialogListCache(userId);
 
             log.info("创建对话成功: userId={}, recipientId={}", userId, recipientId);
-            return Result.success(dialog);
+            return Result.success(convertToDTO(dialogSession));
 
         } catch (Exception e) {
             log.error("创建对话失败", e);
@@ -62,42 +89,58 @@ public class DialogServiceImpl implements DialogService {
     }
 
     @Override
-    public Result<Map<String, Object>> getDialogList(String token, Integer page, Integer size, String type, String status, String sort) {
+    public Result<PageResponseDTO<DialogSessionDTO>> getDialogList(String token, Integer page, Integer size, String type, String status, String sort) {
         try {
-            // 从token中获取用户ID
             Long userId = getUserIdFromToken(token);
             if (userId == null) {
                 return Result.error("无效的token");
             }
 
-            // 模拟数据
-            List<Map<String, Object>> dialogList = new ArrayList<>();
-            for (int i = 0; i < size; i++) {
-                Map<String, Object> dialog = new HashMap<>();
-                dialog.put("id", (long) (i + 1));
-                dialog.put("user_id", userId);
-                dialog.put("recipient_id", (long) (i + 2));
-                dialog.put("recipient_name", "用户" + (i + 2));
-                dialog.put("recipient_avatar", "https://example.com/avatar" + (i + 2) + ".jpg");
-                dialog.put("type", type != null ? type : "private");
-                dialog.put("status", status != null ? status : "active");
-                dialog.put("last_message", "这是最后一条消息" + (i + 1));
-                dialog.put("last_message_sender_id", (long) (i + 2));
-                dialog.put("last_message_at", System.currentTimeMillis() - i * 60000);
-                dialog.put("unread_count", i);
-                dialog.put("created_at", System.currentTimeMillis() - (i + 1) * 3600000);
-                dialog.put("updated_at", System.currentTimeMillis() - i * 60000);
-                dialogList.add(dialog);
+            // 尝试从Redis获取缓存
+            String cacheKey = DIALOG_LIST_CACHE_PREFIX + userId + ":" + page + ":" + size + ":" + type + ":" + status;
+            String cachedData = redisService.stringGetString(cacheKey);
+            if (cachedData != null) {
+                log.info("从Redis缓存获取对话列表: userId={}", userId);
+                PageResponseDTO<DialogSessionDTO> result = JSON.parseObject(cachedData, PageResponseDTO.class);
+                return Result.success(result);
             }
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("items", dialogList);
-            result.put("total", 100);
-            result.put("page", page);
-            result.put("size", size);
-            result.put("total_pages", (int) Math.ceil(100.0 / size));
+            // 从MongoDB获取数据
+            List<DialogSession> dialogList;
+            if (type != null && !type.isEmpty()) {
+                dialogList = dialogSessionRepository.findByUserIdAndType(userId, type);
+            } else if (status != null && !status.isEmpty()) {
+                dialogList = dialogSessionRepository.findByUserIdAndStatus(userId, status);
+            } else {
+                dialogList = dialogSessionRepository.findByUserId(userId);
+            }
 
-            log.info("获取对话列表成功: userId={}, page={}, size={}, type={}, status={}, sort={}", userId, page, size, type, status, sort);
+            // 排序
+            if ("updated_at".equals(sort) || sort == null) {
+                dialogList.sort((a, b) -> b.getUpdatedAt().compareTo(a.getUpdatedAt()));
+            }
+
+            // 分页
+            int start = (page - 1) * size;
+            int end = Math.min(start + size, dialogList.size());
+            List<DialogSession> pagedList = dialogList.subList(start, end);
+
+            List<DialogSessionDTO> items = pagedList.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+
+            PageResponseDTO<DialogSessionDTO> result = PageResponseDTO.<DialogSessionDTO>builder()
+                    .items(items)
+                    .total(dialogList.size())
+                    .page(page)
+                    .size(size)
+                    .totalPages((int) Math.ceil((double) dialogList.size() / size))
+                    .build();
+
+            // 缓存到Redis
+            redisService.stringSetString(cacheKey, JSON.toJSONString(result), CACHE_EXPIRE_TIME);
+
+            log.info("从MongoDB获取对话列表成功: userId={}, page={}, size={}", userId, page, size);
             return Result.success(result);
 
         } catch (Exception e) {
@@ -107,28 +150,36 @@ public class DialogServiceImpl implements DialogService {
     }
 
     @Override
-    public Result<Map<String, Object>> getDialogDetail(Long dialogId, String token) {
+    public Result<DialogSessionDTO> getDialogDetail(Long dialogId, String token) {
         try {
-            // 从token中获取用户ID
             Long userId = getUserIdFromToken(token);
             if (userId == null) {
                 return Result.error("无效的token");
             }
 
-            // 模拟数据
-            Map<String, Object> dialogDetail = new HashMap<>();
-            dialogDetail.put("id", dialogId);
-            dialogDetail.put("user_id", userId);
-            dialogDetail.put("recipient_id", 2L);
-            dialogDetail.put("recipient_name", "用户2");
-            dialogDetail.put("recipient_avatar", "https://example.com/avatar2.jpg");
-            dialogDetail.put("type", "private");
-            dialogDetail.put("status", "active");
-            dialogDetail.put("created_at", System.currentTimeMillis() - 3600000);
-            dialogDetail.put("updated_at", System.currentTimeMillis());
+            // 尝试从Redis获取缓存
+            String cacheKey = DIALOG_CACHE_PREFIX + dialogId;
+            String cachedData = redisService.stringGetString(cacheKey);
+            if (cachedData != null) {
+                log.info("从Redis缓存获取对话详情: dialogId={}", dialogId);
+                DialogSessionDTO result = JSON.parseObject(cachedData, DialogSessionDTO.class);
+                return Result.success(result);
+            }
 
-            log.info("获取对话详情成功: dialogId={}, userId={}", dialogId, userId);
-            return Result.success(dialogDetail);
+            // 从MongoDB获取数据
+            Optional<DialogSession> dialogOpt = dialogSessionRepository.findByIdAndUserId(String.valueOf(dialogId), userId);
+            if (!dialogOpt.isPresent()) {
+                return Result.error("对话不存在或无权访问");
+            }
+
+            DialogSession dialog = dialogOpt.get();
+            DialogSessionDTO result = convertToDTO(dialog);
+
+            // 缓存到Redis（热点数据）
+            redisService.stringSetString(cacheKey, JSON.toJSONString(result), CACHE_EXPIRE_TIME);
+
+            log.info("从MongoDB获取对话详情成功: dialogId={}, userId={}", dialogId, userId);
+            return Result.success(result);
 
         } catch (Exception e) {
             log.error("获取对话详情失败", e);
@@ -137,34 +188,58 @@ public class DialogServiceImpl implements DialogService {
     }
 
     @Override
-    public Result<?> sendMessage(Long dialogId, String token, Map<String, Object> params) {
+    public Result<DialogSessionDTO.MessageDTO> sendMessage(Long dialogId, String token, Map<String, Object> params) {
         try {
-            // 从token中获取用户ID
             Long userId = getUserIdFromToken(token);
             if (userId == null) {
                 return Result.error("无效的token");
             }
 
-            // 获取消息内容
             String content = (String) params.get("content");
             if (content == null || content.isEmpty()) {
                 return Result.error("缺少content参数");
             }
 
-            // 模拟发送消息
-            Map<String, Object> message = new HashMap<>();
-            message.put("id", System.currentTimeMillis());
-            message.put("dialog_id", dialogId);
-            message.put("sender_id", userId);
-            message.put("content", content);
-            message.put("type", params.getOrDefault("type", "text"));
-            message.put("media_urls", params.get("media_urls"));
-            message.put("metadata", params.get("metadata"));
-            message.put("sent_at", System.currentTimeMillis());
-            message.put("status", "sent");
+            // 获取对话
+            Optional<DialogSession> dialogOpt = dialogSessionRepository.findByIdAndUserId(String.valueOf(dialogId), userId);
+            if (!dialogOpt.isPresent()) {
+                return Result.error("对话不存在或无权访问");
+            }
 
-            log.info("发送消息成功: dialogId={}, userId={}, content={}", dialogId, userId, content);
-            return Result.success(message);
+            DialogSession dialog = dialogOpt.get();
+
+            // 创建消息
+            DialogSession.Message message = DialogSession.Message.builder()
+                    .id(UUID.randomUUID().toString())
+                    .senderId(userId)
+                    .content(content)
+                    .type((String) params.getOrDefault("type", "text"))
+                    .mediaUrls((List<String>) params.get("media_urls"))
+                    .metadata((Map<String, Object>) params.get("metadata"))
+                    .sentAt(new Date())
+                    .status("sent")
+                    .build();
+
+            // 添加消息到对话
+            if (dialog.getMessages() == null) {
+                dialog.setMessages(new ArrayList<>());
+            }
+            dialog.getMessages().add(message);
+            dialog.setLastMessage(content);
+            dialog.setLastMessageSenderId(userId);
+            dialog.setLastMessageAt(new Date());
+            dialog.setUpdatedAt(new Date());
+
+            dialogSessionRepository.save(dialog);
+
+            // 清除缓存
+            clearDialogCache(dialogId);
+            clearDialogListCache(userId);
+
+            DialogSessionDTO.MessageDTO messageDTO = convertMessageToDTO(message);
+
+            log.info("发送消息成功: dialogId={}, userId={}", dialogId, userId);
+            return Result.success(messageDTO);
 
         } catch (Exception e) {
             log.error("发送消息失败", e);
@@ -173,39 +248,53 @@ public class DialogServiceImpl implements DialogService {
     }
 
     @Override
-    public Result<?> getMessageList(Long dialogId, String token, Integer page, Integer size, Long before) {
+    public Result<PageResponseDTO<DialogSessionDTO.MessageDTO>> getMessageList(Long dialogId, String token, Integer page, Integer size, Long before) {
         try {
-            // 从token中获取用户ID
             Long userId = getUserIdFromToken(token);
             if (userId == null) {
                 return Result.error("无效的token");
             }
 
-            // 模拟数据
-            List<Map<String, Object>> messageList = new ArrayList<>();
-            long timestamp = before != null ? before : System.currentTimeMillis();
-
-            for (int i = 0; i < size; i++) {
-                Map<String, Object> message = new HashMap<>();
-                message.put("id", System.currentTimeMillis() - i);
-                message.put("dialog_id", dialogId);
-                message.put("sender_id", i % 2 == 0 ? userId : 2L);
-                message.put("content", "这是消息" + (i + 1));
-                message.put("type", "text");
-                message.put("sent_at", timestamp - i * 60000);
-                message.put("status", "read");
-                messageList.add(message);
+            Optional<DialogSession> dialogOpt = dialogSessionRepository.findByIdAndUserId(String.valueOf(dialogId), userId);
+            if (!dialogOpt.isPresent()) {
+                return Result.error("对话不存在或无权访问");
             }
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("items", messageList);
-            result.put("total", 200);
-            result.put("page", page);
-            result.put("size", size);
-            result.put("total_pages", (int) Math.ceil(200.0 / size));
-            result.put("before", messageList.isEmpty() ? null : messageList.get(messageList.size() - 1).get("sent_at"));
+            DialogSession dialog = dialogOpt.get();
+            List<DialogSession.Message> messages = dialog.getMessages();
+            if (messages == null) {
+                messages = new ArrayList<>();
+            }
 
-            log.info("获取消息列表成功: dialogId={}, userId={}, page={}, size={}, before={}", dialogId, userId, page, size, before);
+            // 过滤before时间之前的消息
+            if (before != null) {
+                Date beforeDate = new Date(before);
+                messages = messages.stream()
+                        .filter(m -> m.getSentAt().before(beforeDate))
+                        .collect(Collectors.toList());
+            }
+
+            // 排序（最新的在前）
+            messages.sort((a, b) -> b.getSentAt().compareTo(a.getSentAt()));
+
+            // 分页
+            int start = (page - 1) * size;
+            int end = Math.min(start + size, messages.size());
+            List<DialogSession.Message> pagedMessages = messages.subList(start, end);
+
+            List<DialogSessionDTO.MessageDTO> items = pagedMessages.stream()
+                    .map(this::convertMessageToDTO)
+                    .collect(Collectors.toList());
+
+            PageResponseDTO<DialogSessionDTO.MessageDTO> result = PageResponseDTO.<DialogSessionDTO.MessageDTO>builder()
+                    .items(items)
+                    .total(messages.size())
+                    .page(page)
+                    .size(size)
+                    .totalPages((int) Math.ceil((double) messages.size() / size))
+                    .build();
+
+            log.info("获取消息列表成功: dialogId={}, userId={}", dialogId, userId);
             return Result.success(result);
 
         } catch (Exception e) {
@@ -215,29 +304,34 @@ public class DialogServiceImpl implements DialogService {
     }
 
     @Override
-    public Result<Map<String, Object>> updateMessageStatus(Long dialogId, String token, Map<String, Object> params) {
+    public Result<DialogSessionDTO> updateMessageStatus(Long dialogId, String token, Map<String, Object> params) {
         try {
-            // 从token中获取用户ID
             Long userId = getUserIdFromToken(token);
             if (userId == null) {
                 return Result.error("无效的token");
             }
 
-            // 获取最后读取的消息ID
-            Long lastReadMessageId = (Long) params.get("last_read_message_id");
+            Long lastReadMessageId = ((Number) params.get("last_read_message_id")).longValue();
             if (lastReadMessageId == null) {
                 return Result.error("缺少last_read_message_id参数");
             }
 
-            // 模拟更新消息状态
-            Map<String, Object> result = new HashMap<>();
-            result.put("dialog_id", dialogId);
-            result.put("user_id", userId);
-            result.put("last_read_message_id", lastReadMessageId);
-            result.put("updated_at", System.currentTimeMillis());
+            Optional<DialogSession> dialogOpt = dialogSessionRepository.findByIdAndUserId(String.valueOf(dialogId), userId);
+            if (!dialogOpt.isPresent()) {
+                return Result.error("对话不存在或无权访问");
+            }
 
-            log.info("更新消息状态成功: dialogId={}, userId={}, lastReadMessageId={}", dialogId, userId, lastReadMessageId);
-            return Result.success(result);
+            DialogSession dialog = dialogOpt.get();
+            dialog.setUnreadCount(0);
+            dialog.setUpdatedAt(new Date());
+            dialogSessionRepository.save(dialog);
+
+            // 清除缓存
+            clearDialogCache(dialogId);
+            clearDialogListCache(userId);
+
+            log.info("更新消息状态成功: dialogId={}, userId={}", dialogId, userId);
+            return Result.success(convertToDTO(dialog));
 
         } catch (Exception e) {
             log.error("更新消息状态失败", e);
@@ -246,33 +340,101 @@ public class DialogServiceImpl implements DialogService {
     }
 
     @Override
-    public Result<Map<String, Object>> archiveDialog(Long dialogId, String token, Map<String, Object> params) {
+    public Result<DialogSessionDTO> archiveDialog(Long dialogId, String token, Map<String, Object> params) {
         try {
-            // 从token中获取用户ID
             Long userId = getUserIdFromToken(token);
             if (userId == null) {
                 return Result.error("无效的token");
             }
 
-            // 获取归档状态
             Boolean isArchived = (Boolean) params.get("is_archived");
             if (isArchived == null) {
                 return Result.error("缺少is_archived参数");
             }
 
-            // 模拟归档/取消归档对话
-            Map<String, Object> result = new HashMap<>();
-            result.put("dialog_id", dialogId);
-            result.put("user_id", userId);
-            result.put("is_archived", isArchived);
-            result.put("updated_at", System.currentTimeMillis());
+            Optional<DialogSession> dialogOpt = dialogSessionRepository.findByIdAndUserId(String.valueOf(dialogId), userId);
+            if (!dialogOpt.isPresent()) {
+                return Result.error("对话不存在或无权访问");
+            }
+
+            DialogSession dialog = dialogOpt.get();
+            dialog.setIsArchived(isArchived);
+            dialog.setUpdatedAt(new Date());
+            dialogSessionRepository.save(dialog);
+
+            // 清除缓存
+            clearDialogCache(dialogId);
+            clearDialogListCache(userId);
 
             log.info("{}对话成功: dialogId={}, userId={}", isArchived ? "归档" : "取消归档", dialogId, userId);
-            return Result.success(result);
+            return Result.success(convertToDTO(dialog));
 
         } catch (Exception e) {
             log.error("归档/取消归档对话失败", e);
             return Result.error("归档/取消归档对话失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 将DialogSession转换为DTO
+     */
+    private DialogSessionDTO convertToDTO(DialogSession dialog) {
+        List<DialogSessionDTO.MessageDTO> messageDTOs = null;
+        if (dialog.getMessages() != null) {
+            messageDTOs = dialog.getMessages().stream()
+                    .map(this::convertMessageToDTO)
+                    .collect(Collectors.toList());
+        }
+
+        return DialogSessionDTO.builder()
+                .id(dialog.getId())
+                .userId(dialog.getUserId())
+                .recipientId(dialog.getRecipientId())
+                .type(dialog.getType())
+                .status(dialog.getStatus())
+                .lastMessage(dialog.getLastMessage())
+                .lastMessageSenderId(dialog.getLastMessageSenderId())
+                .lastMessageAt(dialog.getLastMessageAt())
+                .unreadCount(dialog.getUnreadCount())
+                .metadata(dialog.getMetadata())
+                .messages(messageDTOs)
+                .createdAt(dialog.getCreatedAt())
+                .updatedAt(dialog.getUpdatedAt())
+                .isArchived(dialog.getIsArchived())
+                .build();
+    }
+
+    /**
+     * 将Message转换为DTO
+     */
+    private DialogSessionDTO.MessageDTO convertMessageToDTO(DialogSession.Message message) {
+        return DialogSessionDTO.MessageDTO.builder()
+                .id(message.getId())
+                .senderId(message.getSenderId())
+                .content(message.getContent())
+                .type(message.getType())
+                .mediaUrls(message.getMediaUrls())
+                .metadata(message.getMetadata())
+                .sentAt(message.getSentAt())
+                .status(message.getStatus())
+                .build();
+    }
+
+    /**
+     * 清除对话缓存
+     */
+    private void clearDialogCache(Long dialogId) {
+        String cacheKey = DIALOG_CACHE_PREFIX + dialogId;
+        redisService.delete(cacheKey);
+    }
+
+    /**
+     * 清除对话列表缓存
+     */
+    private void clearDialogListCache(Long userId) {
+        Set<String> keys = redisService.keys(DIALOG_LIST_CACHE_PREFIX + userId + ":*");
+        if (keys != null && !keys.isEmpty()) {
+            redisService.delete(keys);
         }
     }
 }

@@ -75,6 +75,19 @@ public class RedisConfig extends CachingConfigurerSupport {
     }
 
     @Bean
+    public RedisTemplate<String, String> stringRedisTemplate(RedisConnectionFactory factory) {
+        RedisTemplate<String, String> template = new RedisTemplate<>();
+        template.setConnectionFactory(factory);
+        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+        template.setKeySerializer(stringRedisSerializer);
+        template.setValueSerializer(stringRedisSerializer);
+        template.setHashKeySerializer(stringRedisSerializer);
+        template.setHashValueSerializer(stringRedisSerializer);
+        template.afterPropertiesSet();
+        return template;
+    }
+
+    @Bean
     @Override
     public CacheManager cacheManager() {
         // 初始化缓存管理器，在这里我们可以缓存的整体过期时间什么的，我这里默认没有配置

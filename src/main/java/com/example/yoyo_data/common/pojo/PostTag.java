@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.*;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 
 /**
  * 帖子标签关联表实体类
@@ -22,4 +23,7 @@ public class PostTag implements Serializable {
 
     @TableField("tag_id")
     private Integer tagId;
+
+    @TableField("created_at")
+    private LocalDateTime createdAt;
 }

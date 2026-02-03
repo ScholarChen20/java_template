@@ -50,8 +50,8 @@ public class UpdateUserProfileRequest {
     private String education;
 
     @ApiModelProperty(value = "旅行偏好", required = false)
-    private String travelPreferences;
+    private java.util.List<String> travelPreferences;
 
     @ApiModelProperty(value = "已访问城市", required = false)
-    private String visitedCities;
+    private java.util.List<String> visitedCities;
 }

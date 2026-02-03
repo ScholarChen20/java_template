@@ -1,14 +1,17 @@
 package com.example.yoyo_data.controller;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.dto.request.CreatePostRequest;
+import com.example.yoyo_data.common.dto.request.UpdatePostRequest;
+import com.example.yoyo_data.service.PostService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.Map;
+import javax.servlet.http.HttpServletRequest;
 
 /**
  * 帖子模块控制器
@@ -18,6 +21,9 @@ import java.util.Map;
 @RequestMapping("/api/posts")
 @Api(tags = "帖子模块", description = "帖子的创建、查询、更新、删除等操作")
 public class PostController {
+
+    @Autowired
+    private PostService postService;
 
     /**
      * 获取帖子列表
@@ -35,16 +41,7 @@ public class PostController {
             @ApiParam(value = "分类", required = false) @RequestParam(value = "category", required = false) String category
     ) {
         log.info("获取帖子列表: page={}, size={}, category={}", page, size, category);
-        
-        // 模拟数据
-        Map<String, Object> result = new HashMap<>();
-        result.put("page", page);
-        result.put("size", size);
-        result.put("category", category);
-        result.put("total", 100);
-        result.put("posts", new java.util.ArrayList<>());
-        
-        return Result.success(result);
+        return postService.getPostList(page, size, category);
     }
 
     /**
@@ -59,104 +56,65 @@ public class PostController {
             @ApiParam(value = "帖子ID", required = true) @PathVariable("postId") Long postId
     ) {
         log.info("获取帖子详情: postId={}", postId);
-        
-        // 模拟数据
-        Map<String, Object> result = new HashMap<>();
-        result.put("id", postId);
-        result.put("title", "帖子标题" + postId);
-        result.put("content", "帖子内容" + postId);
-        result.put("userId", 1L);
-        result.put("username", "用户1");
-        result.put("category", "technology");
-        result.put("tags", new java.util.ArrayList<>());
-        result.put("likeCount", 100);
-        result.put("commentCount", 50);
-        result.put("viewCount", 1000);
-        result.put("createdAt", System.currentTimeMillis());
-        result.put("updatedAt", System.currentTimeMillis());
-        
-        return Result.success(result);
+        return postService.getPostDetail(postId);
     }
 
     /**
      * 创建帖子
      *
-     * @param title 标题
-     * @param content 内容
-     * @param category 分类
-     * @param tags 标签
+     * @param request 创建帖子请求体
+     * @param requestHttp 请求对象，用于获取当前用户信息
      * @return 创建结果
      */
     @PostMapping("/create")
     @ApiOperation(value = "创建帖子", notes = "创建新帖子")
     public Result<?> createPost(
-            @ApiParam(value = "标题", required = true) @RequestParam("title") String title,
-            @ApiParam(value = "内容", required = true) @RequestParam("content") String content,
-            @ApiParam(value = "分类", required = true) @RequestParam("category") String category,
-            @ApiParam(value = "标签", required = false) @RequestParam(value = "tags", required = false) String tags
+            @ApiParam(value = "创建帖子请求体", required = true) @RequestBody CreatePostRequest request,
+            HttpServletRequest requestHttp
     ) {
-        log.info("创建帖子: title={}, category={}, tags={}", title, category, tags);
-        
-        // 模拟数据
-        Map<String, Object> result = new HashMap<>();
-        result.put("id", System.currentTimeMillis());
-        result.put("title", title);
-        result.put("content", content);
-        result.put("category", category);
-        result.put("tags", tags != null ? java.util.Arrays.asList(tags.split(",")) : new java.util.ArrayList<>());
-        result.put("userId", 1L);
-        result.put("username", "用户1");
-        result.put("createdAt", System.currentTimeMillis());
-        result.put("updatedAt", System.currentTimeMillis());
-        
-        return Result.success(result);
+        log.info("创建帖子: title={}, category={}, tags={}", request.getTitle(), request.getCategory(), request.getTags());
+        // 这里需要从请求中获取当前用户ID，暂时硬编码为1
+        Long userId = 1L;
+        return postService.createPost(userId, request);
     }
 
     /**
      * 更新帖子
      *
      * @param postId 帖子ID
-     * @param title 标题
-     * @param content 内容
-     * @param category 分类
-     * @param tags 标签
+     * @param request 更新帖子请求体
+     * @param requestHttp 请求对象，用于获取当前用户信息
      * @return 更新结果
      */
     @PutMapping("/update/{postId}")
     @ApiOperation(value = "更新帖子", notes = "更新帖子信息")
     public Result<?> updatePost(
             @ApiParam(value = "帖子ID", required = true) @PathVariable("postId") Long postId,
-            @ApiParam(value = "标题", required = true) @RequestParam("title") String title,
-            @ApiParam(value = "内容", required = true) @RequestParam("content") String content,
-            @ApiParam(value = "分类", required = true) @RequestParam("category") String category,
-            @ApiParam(value = "标签", required = false) @RequestParam(value = "tags", required = false) String tags
+            @ApiParam(value = "更新帖子请求体", required = true) @RequestBody UpdatePostRequest request,
+            HttpServletRequest requestHttp
     ) {
-        log.info("更新帖子: postId={}, title={}, category={}, tags={}", postId, title, category, tags);
-        
-        // 模拟数据
-        Map<String, Object> result = new HashMap<>();
-        result.put("id", postId);
-        result.put("title", title);
-        result.put("content", content);
-        result.put("category", category);
-        result.put("tags", tags != null ? java.util.Arrays.asList(tags.split(",")) : new java.util.ArrayList<>());
-        result.put("updatedAt", System.currentTimeMillis());
-        
-        return Result.success(result);
+        log.info("更新帖子: postId={}, title={}, category={}, tags={}", postId, request.getTitle(), request.getCategory(), request.getTags());
+        // 这里需要从请求中获取当前用户ID，暂时硬编码为1
+        Long userId = 1L;
+        return postService.updatePost(postId, userId, request);
     }
 
     /**
      * 删除帖子
      *
      * @param postId 帖子ID
+     * @param requestHttp 请求对象，用于获取当前用户信息
      * @return 删除结果
      */
     @DeleteMapping("/delete/{postId}")
     @ApiOperation(value = "删除帖子", notes = "删除帖子")
     public Result<?> deletePost(
-            @ApiParam(value = "帖子ID", required = true) @PathVariable("postId") Long postId
+            @ApiParam(value = "帖子ID", required = true) @PathVariable("postId") Long postId,
+            HttpServletRequest requestHttp
     ) {
         log.info("删除帖子: postId={}", postId);
-        return Result.success("删除帖子成功");
+        // 这里需要从请求中获取当前用户ID，暂时硬编码为1
+        Long userId = 1L;
+        return postService.deletePost(postId, userId);
     }
 }

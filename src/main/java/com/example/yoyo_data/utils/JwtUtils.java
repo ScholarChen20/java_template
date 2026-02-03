@@ -20,12 +20,12 @@ public class JwtUtils {
     private static final Logger log = LoggerFactory.getLogger(JwtUtils.class);
 
     @Value("${jwt.secret}")
-    private String secret;
+    private static String secret;
 
     @Value("${jwt.expiration:7200000}")
-    private Long expiration;
+    private static Long expiration;
 
-    private SecretKey getSigningKey() {
+    private static SecretKey getSigningKey() {
         try {
             // 尝试使用配置的密钥
             SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
@@ -42,7 +42,7 @@ public class JwtUtils {
         return Keys.secretKeyFor(SignatureAlgorithm.HS512);
     }
 
-    public String generateToken(JwtUserDTO jwtUser) {
+    public static String generateToken(JwtUserDTO jwtUser) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", jwtUser.getId());
         claims.put("username", jwtUser.getUsername());
@@ -52,7 +52,7 @@ public class JwtUtils {
         return generateToken(claims, jwtUser.getUsername());
     }
 
-    private String generateToken(Map<String, Object> claims, String subject) {
+    private static String generateToken(Map<String, Object> claims, String subject) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 

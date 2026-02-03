@@ -12,9 +12,6 @@ import com.example.yoyo_data.common.pojo.Users;
  */
 public interface UserService extends IService<Users> {
 
-    Result<?> getUserInfo(Long userId);
-
-    Result<?> updateUserInfo(Long userId, String username, String bio, String avatarUrl);
 
     Result<?> toggleFollow(Long userId, Long targetUserId);
 

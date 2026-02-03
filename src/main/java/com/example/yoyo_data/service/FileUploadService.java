@@ -1,9 +1,8 @@
 package com.example.yoyo_data.service;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.dto.response.FileUploadResponse;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.Map;
 
 /**
  * 文件上传服务接口
@@ -17,7 +16,7 @@ public interface FileUploadService {
      * @param objectName 对象名称
      * @return 上传结果，包含文件URL等信息
      */
-    Result<Map<String, Object>> uploadFile(MultipartFile file, String bucketName, String objectName);
+    Result<FileUploadResponse> uploadFile(MultipartFile file, String bucketName, String objectName);
 
     /**
      * 删除文件
@@ -36,5 +35,5 @@ public interface FileUploadService {
      * @param expiry 过期时间（秒）
      * @return 文件URL
      */
-    Result<Map<String, Object>> getFileUrl(String bucketName, String objectName, Integer expiry);
+    Result<FileUploadResponse> getFileUrl(String bucketName, String objectName, Integer expiry);
 }
