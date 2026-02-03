@@ -1,8 +1,8 @@
 package com.example.yoyo_data.service;
 
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.dto.DialogSessionDTO;
-import com.example.yoyo_data.dto.PageResponseDTO;
+import com.example.yoyo_data.common.dto.DialogSessionDTO;
+import com.example.yoyo_data.common.dto.PageResponseDTO;
 
 import java.util.Map;
 

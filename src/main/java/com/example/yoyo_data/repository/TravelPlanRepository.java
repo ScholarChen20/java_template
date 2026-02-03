@@ -1,6 +1,6 @@
 package com.example.yoyo_data.repository;
 
-import com.example.yoyo_data.document.TravelPlan;
+import com.example.yoyo_data.common.document.TravelPlan;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;

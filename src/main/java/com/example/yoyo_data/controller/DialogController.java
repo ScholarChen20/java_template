@@ -1,8 +1,8 @@
 package com.example.yoyo_data.controller;
 
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.dto.DialogSessionDTO;
-import com.example.yoyo_data.dto.PageResponseDTO;
+import com.example.yoyo_data.common.dto.DialogSessionDTO;
+import com.example.yoyo_data.common.dto.PageResponseDTO;
 import com.example.yoyo_data.service.DialogService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;

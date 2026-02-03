@@ -1,8 +1,8 @@
 package com.example.yoyo_data.service;
 
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.dto.PageResponseDTO;
-import com.example.yoyo_data.dto.TravelPlanDTO;
+import com.example.yoyo_data.common.dto.PageResponseDTO;
+import com.example.yoyo_data.common.dto.TravelPlanDTO;
 
 /**
  * 旅行计划服务接口

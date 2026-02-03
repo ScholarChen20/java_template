@@ -1,4 +1,4 @@
-package com.example.yoyo_data.dto;
+package com.example.yoyo_data.common.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
