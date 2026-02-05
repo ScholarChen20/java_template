@@ -34,7 +34,7 @@ public class HotNewsStreamServiceImpl implements HotNewsStreamService {
             // 1. 清除旧的Stream数据
             try (RedisConnection connection = redisConnectionFactory.getConnection()) {
                 byte[] streamKeyBytes = streamKey.getBytes(StandardCharsets.UTF_8);
-                if (connection.exists(streamKeyBytes) > 0) {
+                if (Boolean.TRUE.equals(connection.exists(streamKeyBytes))) {
                     connection.del(streamKeyBytes);
                 }
             }
@@ -67,7 +67,7 @@ public class HotNewsStreamServiceImpl implements HotNewsStreamService {
             createConsumerGroup(type, consumerGroup);
             
             // 从Stream中消费一条消息
-            Map<String, List<MapRecord<String, Object, Object>>> records = redisTemplate.opsForStream()
+            Map<String, List<MapRecord<String, Object, Object>>> records = (Map<String, List<MapRecord<String, Object, Object>>>) redisTemplate.opsForStream()
                     .read(Consumer.from(consumerGroup, consumerName),
                             StreamReadOptions.empty().count(1),
                             StreamOffset.create(streamKey, ReadOffset.lastConsumed()));
@@ -140,7 +140,7 @@ public class HotNewsStreamServiceImpl implements HotNewsStreamService {
             
             try (RedisConnection connection = redisConnectionFactory.getConnection()) {
                 byte[] streamKeyBytes = streamKey.getBytes(StandardCharsets.UTF_8);
-                return connection.exists(streamKeyBytes) > 0;
+                return Boolean.TRUE.equals(connection.exists(streamKeyBytes));
             }
         } catch (Exception e) {
             log.error("检查Redis Stream是否存在失败", e);

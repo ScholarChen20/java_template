@@ -70,7 +70,18 @@ public class CacheKeyManager {
      * 验证码相关缓存键前缀
      */
     public static final String CAPTCHA_PREFIX = "captcha:";
-
+    /**
+     * 热点数据状态分布锁缓存键前缀
+     */
+    public static final String DISTRIBUTION_STATUS_KEY = "hot_news:distribution:status:";
+    /**
+     * 热点指标数据分布锁缓存键前缀
+     */
+    public static final String DISTRIBUTION_METRICS_KEY = "hot_news:distribution:metrics:";
+    /**
+     * 热点数据分布锁缓存键前缀
+     */
+    public static final String DISTRIBUTION_LOCK_KEY = "hot_news:distribution:lock:";
     /**
      * 缓存默认过期时间（秒） 默认1小时
      */

@@ -6,7 +6,7 @@ import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.document.DialogSession;
 import com.example.yoyo_data.common.dto.DialogSessionDTO;
 import com.example.yoyo_data.common.dto.PageResponseDTO;
-import com.example.yoyo_data.repository.DialogSessionRepository;
+import com.example.yoyo_data.infrastructure.repository.mongodb.DialogSessionRepository;
 import com.example.yoyo_data.service.DialogService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

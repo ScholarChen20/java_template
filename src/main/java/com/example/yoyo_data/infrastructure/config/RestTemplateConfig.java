@@ -1,4 +1,4 @@
-package com.example.yoyo_data.config;
+package com.example.yoyo_data.infrastructure.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

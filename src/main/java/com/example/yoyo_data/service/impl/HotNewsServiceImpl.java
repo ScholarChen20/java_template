@@ -3,7 +3,8 @@ package com.example.yoyo_data.service.impl;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.document.HotNewsDetail;
 import com.example.yoyo_data.common.document.HotNewsMain;
-import com.example.yoyo_data.repository.HotNewsRepository;
+import com.example.yoyo_data.infrastructure.repository.mongodb.HotNewsRepository;
+import com.example.yoyo_data.service.DataDistributionService;
 import com.example.yoyo_data.service.HotNewsCacheService;
 import com.example.yoyo_data.service.HotNewsService;
 import com.example.yoyo_data.service.HotNewsStreamService;
@@ -29,6 +30,9 @@ public class HotNewsServiceImpl implements HotNewsService {
     @Autowired
     private HotNewsApiUtil hotNewsApiUtil;
     
+    @Autowired
+    private DataDistributionService dataDistributionService;
+    
     @Override
     public boolean saveHotNews(HotNewsMain hotNewsMain) {
         try {
@@ -53,7 +57,7 @@ public class HotNewsServiceImpl implements HotNewsService {
                 log.info("从Redis缓存获取热点排行数据，类型: {}, 数量: {}", type, count);
                 List<HotNewsDetail> hotNewsDetails = hotNewsCacheService.getHotNewsFromRedisZSet(type, count);
                 if (!hotNewsDetails.isEmpty()) {
-                    return Result.success(hotNewsDetails);
+                    return hotNewsDetails;
                 }
             }
 
@@ -63,10 +67,10 @@ public class HotNewsServiceImpl implements HotNewsService {
             if (hotNewsMain != null && hotNewsMain.getData() != null && !hotNewsMain.getData().isEmpty()) {
                 List<HotNewsDetail> hotNewsDetails = hotNewsMain.getData();
 
-                // 存入Redis缓存
+                // 3. 存入Redis缓存
                 hotNewsCacheService.saveHotNewsToRedisZSet(type, hotNewsDetails);
 
-                // 截取指定数量
+                // 4. 截取指定数量
                 if (hotNewsDetails.size() > count) {
                     hotNewsDetails = hotNewsDetails.subList(0, count);
                 }
@@ -77,6 +81,18 @@ public class HotNewsServiceImpl implements HotNewsService {
             }
         } catch (Exception e) {
             log.error("获取最新热点数据失败", e);
+            return null;
+        }
+    }
+    
+    @Override
+    public HotNewsMain getLatestHotNews(String type) {
+        try {
+            HotNewsMain hotNewsMain = hotNewsRepository.findTopByTypeOrderByCreatedAtDesc(type);
+            log.info("获取最新热点数据完整对象成功，类型: {}, 是否找到: {}", type, hotNewsMain != null);
+            return hotNewsMain;
+        } catch (Exception e) {
+            log.error("获取最新热点数据完整对象失败", e);
             return null;
         }
     }
@@ -94,8 +110,13 @@ public class HotNewsServiceImpl implements HotNewsService {
 
                 // 3. 存入Redis缓存
                 hotNewsCacheService.saveHotNewsToRedisZSet(type, hotNewsMain.getData());
+                
                 // 4. 发送到Stream
                 hotNewsStreamService.publishHotNewsToStream(type, hotNewsMain.getData());
+                
+                // 5. 分发热点数据到不同等级的用户
+                dataDistributionService.distributeHotNews(type, hotNewsMain.getData());
+                
                 return hotNewsMain;
             } else {
                 log.warn("从接口获取热点数据失败或数据无效，类型: {}", type);

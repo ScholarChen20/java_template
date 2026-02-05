@@ -1,4 +1,4 @@
-package com.example.yoyo_data.config;
+package com.example.yoyo_data.infrastructure.config.security;
 
 import com.example.yoyo_data.interceptor.JwtInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;

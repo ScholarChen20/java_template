@@ -31,4 +31,11 @@ public interface HotNewsCacheService {
      * @param type 热点类型
      */
     void clearHotNewsCache(String type);
+    
+    /**
+     * 生成热点数据Stream的Redis键
+     * @param type 热点类型
+     * @return Redis键
+     */
+    String getHotNewsStreamKey(String type);
 }

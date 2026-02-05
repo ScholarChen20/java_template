@@ -1,4 +1,4 @@
-package com.example.yoyo_data.repository;
+package com.example.yoyo_data.infrastructure.repository.mongodb;
 
 import com.example.yoyo_data.common.document.HotNewsMain;
 import org.springframework.data.mongodb.repository.MongoRepository;

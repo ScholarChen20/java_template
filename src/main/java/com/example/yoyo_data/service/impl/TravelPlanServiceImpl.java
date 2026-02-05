@@ -6,7 +6,7 @@ import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.document.TravelPlan;
 import com.example.yoyo_data.common.dto.PageResponseDTO;
 import com.example.yoyo_data.common.dto.TravelPlanDTO;
-import com.example.yoyo_data.repository.TravelPlanRepository;
+import com.example.yoyo_data.infrastructure.repository.mongodb.TravelPlanRepository;
 import com.example.yoyo_data.service.TravelPlanService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

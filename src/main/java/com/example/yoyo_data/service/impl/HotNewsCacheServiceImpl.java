@@ -35,11 +35,7 @@ public class HotNewsCacheServiceImpl implements HotNewsCacheService {
         return HOT_NEWS_ZSET_KEY_PREFIX + type + ":" + date;
     }
     
-    /**
-     * 生成热点数据Stream的Redis键
-     * @param type 热点类型
-     * @return Redis键
-     */
+    @Override
     public String getHotNewsStreamKey(String type) {
         return HOT_NEWS_STREAM_KEY_PREFIX + type;
     }
@@ -49,17 +45,18 @@ public class HotNewsCacheServiceImpl implements HotNewsCacheService {
         try {
             String key = getHotNewsZSetKey(type);
             
-            // 清除旧数据
+            // 1. 清除旧数据
             redisTemplate.delete(key);
             
-            // 存入ZSET，score为hot值，member为序列化的HotNewsDetail对象
+            // 2. 存入ZSET，score为hot值，member为序列化的HotNewsDetail对象
             for (HotNewsDetail detail : hotNewsDetails) {
                 try {
-                    // 将hot字符串转换为double类型
-                    double hotValue = Double.parseDouble(detail.getHot());
+                    // 2.1 先取出hot的单位万
+                    String hotUnit = detail.getHot().substring(0,detail.getHot().length() - 1);
+                    double hotValue = Double.parseDouble(hotUnit);
                     redisTemplate.opsForZSet().add(key, detail, hotValue);
                 } catch (NumberFormatException e) {
-                    // 如果转换失败，使用默认值0
+                    // 2.2 如果转换失败，使用默认值0
                     log.warn("转换hot值失败，使用默认值0，标题: {}", detail.getTitle());
                     redisTemplate.opsForZSet().add(key, detail, 0);
                 }

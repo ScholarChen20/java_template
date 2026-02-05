@@ -14,11 +14,19 @@ public interface HotNewsService {
     boolean saveHotNews(HotNewsMain hotNewsMain);
     
     /**
-     * 获取最新的热点数据
+     * 获取最新的热点数据详情列表
      * @param type 热点类型
-     * @return 热点数据
+     * @param count 获取数量
+     * @return 热点数据详情列表
      */
     List<HotNewsDetail> getLatestHotNews(String type, Integer count);
+    
+    /**
+     * 获取最新的热点数据完整对象
+     * @param type 热点类型
+     * @return 热点数据完整对象
+     */
+    HotNewsMain getLatestHotNews(String type);
     
     /**
      * 从第三方接口获取并保存热点数据
