@@ -43,7 +43,7 @@ spring:
 jwt:
   secret: TkyvN/nNzFSD7P9HknIAOjsGYi2xxzH6O2KXUGBbvTDoppofvlcspkENRR2KymyS3rlVBKRl60a9wJnk4IC4xw==
   expiration: 7200000
-  token-expire: 7200
+  token-expire: 7200000
   token-type: Bearer
   header-name: Authorization
 

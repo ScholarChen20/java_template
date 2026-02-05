@@ -2,7 +2,7 @@ package com.example.yoyo_data.jwt;
 
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson.JSON;
-import com.example.yoyo_data.cache.RedisService;
+import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.constant.CacheKey;
 import com.example.yoyo_data.common.dto.JwtUserDTO;
 import com.example.yoyo_data.common.vo.UserVO;

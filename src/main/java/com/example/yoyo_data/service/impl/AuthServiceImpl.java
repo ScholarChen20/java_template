@@ -1,18 +1,17 @@
 package com.example.yoyo_data.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.example.yoyo_data.cache.RedisService;
+import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.JwtUserDTO;
 import com.example.yoyo_data.common.dto.request.*;
 import com.example.yoyo_data.common.dto.response.*;
 import com.example.yoyo_data.common.vo.UserVO;
-import com.example.yoyo_data.mapper.UserMapper;
+import com.example.yoyo_data.infrastructure.repository.UserMapper;
 import com.example.yoyo_data.common.pojo.Users;
 import com.example.yoyo_data.service.AuthService;
 import com.example.yoyo_data.support.exception.BusinessException;
 import com.example.yoyo_data.support.exception.SystemException;
-import com.example.yoyo_data.utils.HashUtils;
 import com.example.yoyo_data.utils.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,11 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Date;
-import java.util.concurrent.TimeUnit;
 
-import static com.example.yoyo_data.data.cache.CacheKeyManager.CacheTTL.SEVEN_DAYS;
-import static com.example.yoyo_data.data.cache.CacheKeyManager.USER_TOKEN_PREFIX;
-import static com.example.yoyo_data.data.cache.CacheKeyManager.VERIFY_CODE_PREFIX;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.*;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.SEVEN_DAYS;
 
 /**
  * 认证服务实现类
@@ -274,8 +271,7 @@ public class AuthServiceImpl implements AuthService {
                 redisService.delete(cacheKey);
 
                 // 2. 将token加入黑名单（设置过期时间为token的剩余有效期）
-                String blacklistKey = "blacklist:token";
-                redisService.setAddSetObject(blacklistKey, token);
+                redisService.setAddSetObject(BLACKLIST_TOKEN, token);
 
                 log.info("用户登出成功");
             }

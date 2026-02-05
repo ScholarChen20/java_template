@@ -4,7 +4,18 @@
       "Bash(tree /F \"D:\\\\JavaPro\\\\yoyo_data\\\\src\\\\main\\\\java\")",
       "Bash(tree:*)",
       "Bash(ls:*)",
-      "Bash(openssl rand:*)"
+      "Bash(openssl rand:*)",
+      "Bash(grep:*)",
+      "Bash(dir:*)",
+      "Bash(xargs:*)",
+      "Bash(for file in UserServiceImpl.java CaptchaServiceImpl.java DialogServiceImpl.java TravelPlanServiceImpl.java LimiterServiceImpl.java PostServiceImpl.java)",
+      "Bash(do sed -i 's/import com\\\\.example\\\\.yoyo_data\\\\.cache\\\\.RedisService/import com.example.yoyo_data.infrastructure.cache.RedisService/g' \"$file\")",
+      "Bash(done)",
+      "Bash(for file in PostServiceImpl.java LimiterServiceImpl.java UserServiceImpl.java AuthServiceImpl.java CommentServiceImpl.java)",
+      "Bash(do sed -i 's/import com\\\\.example\\\\.yoyo_data\\\\.mapper\\\\./import com.example.yoyo_data.infrastructure.repository./g' \"$file\")",
+      "Bash(for file in *.java)",
+      "Bash(do sed -i 's/package com\\\\.example\\\\.yoyo_data\\\\.mapper;/package com.example.yoyo_data.infrastructure.repository;/g' \"$file\")",
+      "Bash(do mv \"$file\" \"../infrastructure/repository/$file\")"
     ]
   }
 }

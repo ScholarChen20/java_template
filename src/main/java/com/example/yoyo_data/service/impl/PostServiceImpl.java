@@ -1,16 +1,16 @@
 package com.example.yoyo_data.service.impl;
 
 import com.alibaba.fastjson.JSON;
-import com.example.yoyo_data.cache.RedisService;
+import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.request.CreatePostRequest;
 import com.example.yoyo_data.common.dto.request.UpdatePostRequest;
 import com.example.yoyo_data.common.pojo.Post;
 import com.example.yoyo_data.common.pojo.PostTag;
 import com.example.yoyo_data.common.pojo.Tag;
-import com.example.yoyo_data.mapper.PostMapper;
-import com.example.yoyo_data.mapper.PostTagMapper;
-import com.example.yoyo_data.mapper.TagMapper;
+import com.example.yoyo_data.infrastructure.repository.PostMapper;
+import com.example.yoyo_data.infrastructure.repository.PostTagMapper;
+import com.example.yoyo_data.infrastructure.repository.TagMapper;
 import com.example.yoyo_data.service.PostService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

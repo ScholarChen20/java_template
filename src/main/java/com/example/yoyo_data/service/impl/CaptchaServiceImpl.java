@@ -4,15 +4,15 @@ import cn.hutool.captcha.CaptchaUtil;
 import cn.hutool.captcha.LineCaptcha;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import com.example.yoyo_data.cache.RedisService;
+import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.dto.CaptchaDTO;
 import com.example.yoyo_data.service.CaptchaService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import static com.example.yoyo_data.data.cache.CacheKeyManager.CAPTCHA_KEY_PREFIX;
-import static com.example.yoyo_data.data.cache.CacheKeyManager.CacheTTL.FIVE_MINUTES;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CAPTCHA_KEY_PREFIX;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.FIVE_MINUTES;
 
 @Service
 @Slf4j

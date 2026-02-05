@@ -1,7 +1,7 @@
 package com.example.yoyo_data.service.impl;
 
 import com.alibaba.fastjson.JSON;
-import com.example.yoyo_data.cache.RedisService;
+import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.document.DialogSession;
 import com.example.yoyo_data.common.dto.DialogSessionDTO;

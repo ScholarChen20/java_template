@@ -1,25 +1,24 @@
 package com.example.yoyo_data.service.impl;
 
+//import cn.hutool.json.JSON;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.example.yoyo_data.cache.RedisService;
+import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.JwtUserDTO;
 import com.example.yoyo_data.common.dto.request.UpdateUserProfileRequest;
 import com.example.yoyo_data.common.pojo.Follow;
 import com.example.yoyo_data.common.pojo.UserProfile;
 import com.example.yoyo_data.common.pojo.Users;
-import com.example.yoyo_data.mapper.FollowMapper;
-import com.example.yoyo_data.mapper.UserMapper;
-import com.example.yoyo_data.mapper.UserProfileMapper;
+import com.example.yoyo_data.infrastructure.repository.FollowMapper;
+import com.example.yoyo_data.infrastructure.repository.UserMapper;
+import com.example.yoyo_data.infrastructure.repository.UserProfileMapper;
 import com.example.yoyo_data.service.UserService;
 import com.example.yoyo_data.utils.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,10 +26,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
-import static com.example.yoyo_data.data.cache.CacheKeyManager.*;
-import static com.example.yoyo_data.data.cache.CacheKeyManager.CacheTTL.*;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.*;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.*;
 
 /**
  * 用户服务实现类
@@ -269,10 +267,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
         try {
             // 1. 从redis中取出用户信息
             String cacheKey = USER_TOKEN_PREFIX + token;
-            String userStr  = redisService.stringGetString(cacheKey);
+            JwtUserDTO jwtUserDTO = redisService.getCacheObject(cacheKey);
 
-            // 2. 解析用户信息
-            Users user = JSON.parseObject(userStr, Users.class);
+            // 2. 获取id
+            Long userId = jwtUserDTO.getId();
+
+            // 3. 构建返回对象
+            Users user = baseMapper.selectById(userId);
             log.info("获取当前用户信息成功: token={}", token);
             return Result.success(user);
 
@@ -312,7 +313,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
 
             String newToken = jwtUtils.generateToken(jwtUser);
 
-            // 5. 缓存用户信息到Redis（2小时过期）
+            // 5. 缓存用户信息到Redis（7天过期）
             String cacheKey = USER_TOKEN_PREFIX + newToken;
             redisService.objectSetObject(cacheKey, jwtUser, SEVEN_DAYS);
 
