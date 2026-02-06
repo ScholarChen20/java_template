@@ -1,4 +1,4 @@
-package com.example.yoyo_data.utils;
+package com.example.yoyo_data.util.storage;
 
 import com.aliyun.oss.*;
 import com.aliyun.oss.common.auth.CredentialsProviderFactory;

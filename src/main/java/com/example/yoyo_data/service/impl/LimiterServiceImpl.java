@@ -1,22 +1,18 @@
 package com.example.yoyo_data.service.impl;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.infrastructure.repository.UserMapper;
 import com.example.yoyo_data.common.pojo.Users;
 import com.example.yoyo_data.service.LimiterService;
-import com.example.yoyo_data.utils.HashUtils;
-import com.example.yoyo_data.utils.RRateLimiterUtils;
-import com.example.yoyo_data.utils.RedisUtils;
+import com.example.yoyo_data.util.encrypt.HashUtils;
+import com.example.yoyo_data.util.limiter.RRateLimiterUtils;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.Map;
 
 @Service
 public class LimiterServiceImpl extends ServiceImpl<UserMapper, Users>  implements LimiterService {

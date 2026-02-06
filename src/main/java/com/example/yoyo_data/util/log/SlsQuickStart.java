@@ -1,4 +1,4 @@
-package com.example.yoyo_data.utils.sls;
+package com.example.yoyo_data.util.log;
 
 import com.aliyun.openservices.log.common.Index;
 import com.aliyun.openservices.log.common.LogContent;

@@ -1,6 +1,6 @@
 package com.example.yoyo_data.common.dto;
 
-import com.example.yoyo_data.common.Enum.UserLevel;
+import com.example.yoyo_data.common.enums.UserLevel;
 import lombok.Data;
 
 import java.util.Map;

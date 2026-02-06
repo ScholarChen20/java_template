@@ -61,4 +61,17 @@ public interface UserService extends IService<Users> {
      * @return 用户信息
      */
     Result<Users> getUserById(Long id);
+
+    /**
+     *  获取其他用户档案
+     * @param id
+     * @return
+     */
+    boolean isActive(Long id);
+    /**
+     * 激活用户
+     * @param id
+     * @return
+     */
+    boolean activeUser(Long id);
 }

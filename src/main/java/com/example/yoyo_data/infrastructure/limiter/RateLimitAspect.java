@@ -1,14 +1,13 @@
 package com.example.yoyo_data.infrastructure.limiter;
 
-import com.example.yoyo_data.support.exception.BusinessException;
-import com.example.yoyo_data.infrastructure.utils.ThreadLocalUtils;
+import com.example.yoyo_data.common.exception.BusinessException;
+import com.example.yoyo_data.util.ThreadLocalUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.redisson.api.RRateLimiter;
-import org.redisson.api.RateIntervalUnit;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

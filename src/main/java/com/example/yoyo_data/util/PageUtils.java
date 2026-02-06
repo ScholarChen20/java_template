@@ -1,4 +1,4 @@
-package com.example.yoyo_data.infrastructure.utils;
+package com.example.yoyo_data.util;
 
 import com.example.yoyo_data.infrastructure.base.BasePage;
 import com.baomidou.mybatisplus.core.metadata.IPage;

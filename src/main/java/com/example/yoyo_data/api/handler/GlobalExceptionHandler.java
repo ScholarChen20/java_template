@@ -1,9 +1,9 @@
 package com.example.yoyo_data.api.handler;
 
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.support.exception.BusinessException;
-import com.example.yoyo_data.support.exception.SystemException;
-import com.example.yoyo_data.support.exception.ValidationException;
+import com.example.yoyo_data.common.exception.BusinessException;
+import com.example.yoyo_data.common.exception.SystemException;
+import com.example.yoyo_data.common.exception.ValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;

@@ -10,9 +10,9 @@ import com.example.yoyo_data.common.vo.UserVO;
 import com.example.yoyo_data.infrastructure.repository.UserMapper;
 import com.example.yoyo_data.common.pojo.Users;
 import com.example.yoyo_data.service.AuthService;
-import com.example.yoyo_data.support.exception.BusinessException;
-import com.example.yoyo_data.support.exception.SystemException;
-import com.example.yoyo_data.utils.JwtUtils;
+import com.example.yoyo_data.common.exception.BusinessException;
+import com.example.yoyo_data.common.exception.SystemException;
+import com.example.yoyo_data.util.jwt.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -153,10 +153,11 @@ public class AuthServiceImpl implements AuthService {
 
             // 4. 生成JWT Token
             JwtUserDTO jwtUser = new JwtUserDTO();
-            jwtUser.setId(user.getId().longValue());
+            jwtUser.setId(user.getId());
             jwtUser.setUsername(user.getUserName());
             jwtUser.setEmail(user.getEmail());
             jwtUser.setPhone(user.getPhone());
+            jwtUser.setAvatar(user.getAvatarUrl());
 
             String token = jwtUtils.generateToken(jwtUser);
 
@@ -173,7 +174,7 @@ public class AuthServiceImpl implements AuthService {
             LoginResponse response = LoginResponse.builder()
                     .token(token)
                     .user(userVO)
-                    .expiresAt(new Date(System.currentTimeMillis() + 7200000))
+                    .expiresAt(new Date(System.currentTimeMillis() + 72000000))
                     .build();
 
             log.info("用户登录成功: userId={}, userName={}", user.getId(), user.getUserName());
@@ -228,14 +229,15 @@ public class AuthServiceImpl implements AuthService {
                 jwtUser.setUsername(user.getUserName());
                 jwtUser.setEmail(user.getEmail());
                 jwtUser.setPhone(user.getPhone());
+                jwtUser.setAvatar(user.getAvatarUrl());
             }
 
             // 3. 生成新token
             String newToken = jwtUtils.generateToken(jwtUser);
 
             // 4. 更新缓存
-            String oldCacheKey = "user:token:" + token;
-            String newCacheKey = "user:token:" + newToken;
+            String oldCacheKey = USER_TOKEN_PREFIX + token;
+            String newCacheKey = USER_TOKEN_PREFIX + newToken;
             redisService.delete(oldCacheKey);
             redisService.objectSetObject(newCacheKey, jwtUser, SEVEN_DAYS);
 

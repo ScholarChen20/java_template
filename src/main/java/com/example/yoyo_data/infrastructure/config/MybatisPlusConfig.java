@@ -1,6 +1,7 @@
 package com.example.yoyo_data.infrastructure.config;
 
 //import com.baomidou.mybatisplus.extension.handlers.MappingTypeHandler;
+import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import org.springframework.context.annotation.Bean;
@@ -25,9 +26,8 @@ public class MybatisPlusConfig {
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-
         // 添加分页插件
-        PaginationInnerInterceptor paginationInnerInterceptor = new PaginationInnerInterceptor();
+        PaginationInnerInterceptor paginationInnerInterceptor = new PaginationInnerInterceptor(DbType.MYSQL);
         // 设置数据库方言为MySQL
 //        paginationInnerInterceptor.setDialect("mysql");
         // 设置单页最大条数为500

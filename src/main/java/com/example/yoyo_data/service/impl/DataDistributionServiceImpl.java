@@ -1,10 +1,13 @@
 package com.example.yoyo_data.service.impl;
 
-import com.example.yoyo_data.common.Enum.UserLevel;
+//import cn.hutool.json.JSON;
+import com.alibaba.fastjson.JSON;
+import com.example.yoyo_data.common.enums.UserLevel;
 import com.example.yoyo_data.common.document.HotNewsDetail;
 import com.example.yoyo_data.common.dto.DistributionMetrics;
 import com.example.yoyo_data.common.dto.DistributionResult;
 import com.example.yoyo_data.common.dto.DistributionStatus;
+import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.service.DataDistributionService;
 import com.example.yoyo_data.service.HotNewsCacheService;
 import com.example.yoyo_data.service.UserLevelService;
@@ -17,12 +20,12 @@ import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.*;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.ONE_DAY;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.ONE_HOUR;
 
 @Slf4j
 @Service
@@ -38,14 +41,17 @@ public class DataDistributionServiceImpl implements DataDistributionService {
     private RedisTemplate<String, Object> redisTemplate;
 
     private static final long LOCK_EXPIRE_SECONDS = 60;
-    
+
+    @Autowired
+    private RedisService redisService;
+
     @Override
     public DistributionResult distributeHotNews(String type, List<HotNewsDetail> hotNewsDetails) {
         try {
             String lockKey = DISTRIBUTION_LOCK_KEY + type;
             
             // 尝试获取分布式锁，防止重复分发
-            Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_EXPIRE_SECONDS, TimeUnit.SECONDS);
+            Boolean locked = redisService.setIfAbsent(lockKey, "1", LOCK_EXPIRE_SECONDS, TimeUnit.SECONDS);
             if (locked == null || !locked) {
                 log.warn("分发任务正在进行中，跳过本次分发，类型: {}", type);
                 return new DistributionResult(false, type, 0, new HashMap<>(), "分发任务正在进行中");
@@ -57,7 +63,7 @@ public class DataDistributionServiceImpl implements DataDistributionService {
                 // 记录分发状态
                 DistributionStatus status = new DistributionStatus(type, true, System.currentTimeMillis(), 
                         hotNewsDetails.size(), 0);
-                redisTemplate.opsForValue().set(DISTRIBUTION_STATUS_KEY + type, status, 1, TimeUnit.HOURS);
+                redisService.stringSetString(DISTRIBUTION_STATUS_KEY + type, JSON.toJSONString(status), ONE_HOUR);
                 
                 // 按等级分发数据
                 Map<UserLevel, Integer> levelCounts = new HashMap<>();
@@ -70,7 +76,7 @@ public class DataDistributionServiceImpl implements DataDistributionService {
                 status.setDistributing(false);
                 status.setProcessedCount(hotNewsDetails.size());
                 status.setPendingCount(0);
-                redisTemplate.opsForValue().set(DISTRIBUTION_STATUS_KEY + type, status, 1, TimeUnit.HOURS);
+                redisService.stringSetString(DISTRIBUTION_STATUS_KEY + type, JSON.toJSONString(status), ONE_HOUR);
                 
                 // 更新分发指标
                 updateDistributionMetrics(type, hotNewsDetails.size(), levelCounts, System.currentTimeMillis() - startTime);
@@ -81,7 +87,7 @@ public class DataDistributionServiceImpl implements DataDistributionService {
                 return new DistributionResult(true, type, hotNewsDetails.size(), levelCounts, "分发成功");
             } finally {
                 // 释放锁
-                redisTemplate.delete(lockKey);
+                redisService.delete(lockKey);
             }
         } catch (Exception e) {
             log.error("分发热点数据失败，类型: {}", type, e);
@@ -94,7 +100,7 @@ public class DataDistributionServiceImpl implements DataDistributionService {
             String streamKey = hotNewsCacheService.getHotNewsStreamKey(type) + ":" + level.getName();
             
             // 清除旧的Stream数据
-            redisTemplate.delete(streamKey);
+            redisService.delete(streamKey);
             
             // 根据等级确定分发数量
             int distributeCount = calculateDistributeCount(hotNewsDetails.size(), level);
@@ -109,7 +115,7 @@ public class DataDistributionServiceImpl implements DataDistributionService {
                 fields.put("index", i);
                 fields.put("detail", detail.toString());
                 
-                redisTemplate.opsForStream().add(streamKey, fields);
+                redisService.streamAdd(streamKey, fields);
             }
             
             log.info("分发热点数据到等级 {} 成功，数量: {}, Stream键: {}", level.getName(), distributeCount, streamKey);
@@ -161,7 +167,7 @@ public class DataDistributionServiceImpl implements DataDistributionService {
             List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream()
                     .read(
                             StreamReadOptions.empty().count(count),
-                            StreamOffset.create(streamKey, ReadOffset.lastConsumed())
+                            StreamOffset.create(streamKey, ReadOffset.from("0"))
                     );
             
             if (records != null && !records.isEmpty()) {
@@ -179,6 +185,7 @@ public class DataDistributionServiceImpl implements DataDistributionService {
                     
                     hotNewsDetails.add(detail);
                 }
+                log.info("从Stream消费热点数据成功，Stream键: {}, 数量: {}", streamKey, hotNewsDetails.size());
                 return hotNewsDetails;
             }
             
@@ -193,13 +200,13 @@ public class DataDistributionServiceImpl implements DataDistributionService {
     public DistributionStatus getDistributionStatus(String type) {
         try {
             String statusKey = DISTRIBUTION_STATUS_KEY + type;
-            DistributionStatus status = (DistributionStatus) redisTemplate.opsForValue().get(statusKey);
-            
-            if (status == null) {
+            String statusStr = redisService.stringGetString(statusKey);
+            if (statusStr == null) {
                 return new DistributionStatus(type, false, 0, 0, 0);
             }
-            
-            return status;
+
+            // 解析状态字符串
+            return JSON.parseObject(statusStr, DistributionStatus.class);
         } catch (Exception e) {
             log.error("获取分发状态失败，类型: {}", type, e);
             return new DistributionStatus(type, false, 0, 0, 0);
@@ -210,17 +217,33 @@ public class DataDistributionServiceImpl implements DataDistributionService {
     public DistributionMetrics getDistributionMetrics(String type) {
         try {
             String metricsKey = DISTRIBUTION_METRICS_KEY + type;
-            DistributionMetrics metrics = (DistributionMetrics) redisTemplate.opsForValue().get(metricsKey);
-            
-            if (metrics == null) {
+            String metricStr = redisService.stringGetString(metricsKey);
+            if (metricStr == null) {
                 return new DistributionMetrics(type, 0, new HashMap<>(), 0, 0);
             }
-            
-            return metrics;
+            // 检查是否为有效的JSON字符串
+            if (!isValidJson(metricStr)) {
+                log.warn("Redis中存储的分发指标不是有效的JSON格式，类型: {}", type);
+                return new DistributionMetrics(type, 0, new HashMap<>(), 0, 0);
+            }
+            return JSON.parseObject(metricStr, DistributionMetrics.class);
         } catch (Exception e) {
             log.error("获取分发指标失败，类型: {}", type, e);
             return new DistributionMetrics(type, 0, new HashMap<>(), 0, 0);
         }
+    }
+    
+    /**
+     * 检查字符串是否为有效的JSON格式
+     * @param str 待检查的字符串
+     * @return 是否为有效的JSON格式
+     */
+    private boolean isValidJson(String str) {
+        if (str == null || str.trim().isEmpty()) {
+            return false;
+        }
+        str = str.trim();
+        return (str.startsWith("{") && str.endsWith("}")) || (str.startsWith("[") && str.endsWith("]"));
     }
     
     private void updateDistributionMetrics(String type, int totalCount, 
@@ -246,9 +269,9 @@ public class DataDistributionServiceImpl implements DataDistributionService {
             long totalDistributed = metrics.getTotalDistributed();
             double avgTime = (metrics.getAvgDistributionTime() * (totalDistributed - totalCount) + distributionTime) / totalDistributed;
             metrics.setAvgDistributionTime(avgTime);
-            
+
             // 存入缓存
-            redisTemplate.opsForValue().set(metricsKey, metrics, 24, TimeUnit.HOURS);
+            redisService.stringSetString(metricsKey, JSON.toJSONString(metrics), ONE_DAY);
             
             log.info("更新分发指标成功，类型: {}, 总分发数: {}", type, totalDistributed);
         } catch (Exception e) {

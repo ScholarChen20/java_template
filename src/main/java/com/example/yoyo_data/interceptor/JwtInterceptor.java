@@ -1,7 +1,7 @@
 package com.example.yoyo_data.interceptor;
 
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.utils.JwtUtils;
+import com.example.yoyo_data.util.jwt.JwtUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

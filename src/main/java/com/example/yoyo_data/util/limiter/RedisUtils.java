@@ -1,4 +1,4 @@
-package com.example.yoyo_data.utils;
+package com.example.yoyo_data.util.limiter;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;

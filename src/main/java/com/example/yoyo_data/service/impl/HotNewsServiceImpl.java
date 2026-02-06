@@ -1,6 +1,5 @@
 package com.example.yoyo_data.service.impl;
 
-import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.document.HotNewsDetail;
 import com.example.yoyo_data.common.document.HotNewsMain;
 import com.example.yoyo_data.infrastructure.repository.mongodb.HotNewsRepository;
@@ -8,7 +7,7 @@ import com.example.yoyo_data.service.DataDistributionService;
 import com.example.yoyo_data.service.HotNewsCacheService;
 import com.example.yoyo_data.service.HotNewsService;
 import com.example.yoyo_data.service.HotNewsStreamService;
-import com.example.yoyo_data.utils.HotNewsApiUtil;
+import com.example.yoyo_data.util.tpi.HotNewsApiUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

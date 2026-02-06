@@ -1,4 +1,4 @@
-package com.example.yoyo_data.utils;
+package com.example.yoyo_data.util.jwt;
 
 import com.example.yoyo_data.common.dto.JwtUserDTO;
 import io.jsonwebtoken.Claims;
@@ -61,9 +61,9 @@ public class JwtUtils {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", jwtUser.getId());
         claims.put("username", jwtUser.getUsername());
-        claims.put("nickname", jwtUser.getNickname());
-        claims.put("roles", jwtUser.getRoles());
-        claims.put("permissions", jwtUser.getPermissions());
+        claims.put("phone", jwtUser.getPhone());
+        claims.put("avatar", jwtUser.getAvatar());
+        claims.put("email", jwtUser.getEmail());
         return generateToken(claims, jwtUser.getUsername());
     }
 

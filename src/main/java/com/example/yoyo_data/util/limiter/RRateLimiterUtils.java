@@ -1,4 +1,4 @@
-package com.example.yoyo_data.utils;
+package com.example.yoyo_data.util.limiter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RRateLimiter;

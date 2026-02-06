@@ -1,6 +1,6 @@
 package com.example.yoyo_data.common.pojo;
 
-import com.example.yoyo_data.common.Enum.UserLevel;
+import com.example.yoyo_data.common.enums.UserLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

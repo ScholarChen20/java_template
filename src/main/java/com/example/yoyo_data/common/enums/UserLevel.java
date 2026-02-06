@@ -1,4 +1,4 @@
-package com.example.yoyo_data.common.Enum;
+package com.example.yoyo_data.common.enums;
 
 import lombok.Getter;
 

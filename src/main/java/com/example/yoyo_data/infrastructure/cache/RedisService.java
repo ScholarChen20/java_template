@@ -590,4 +590,71 @@ public interface RedisService {
 
     Boolean setIfAbsent(String key, String value, long timeout, TimeUnit unit);
 
+    /**
+     * <p>
+     * 向Stream中添加消息
+     * </p>
+     *
+     * @param streamKey 流键
+     * @param values    消息内容
+     * @return 消息ID
+     */
+    String streamAdd(String streamKey, Map<String, Object> values);
+
+    /**
+     * <p>
+     * 从Stream中读取消息
+     * </p>
+     *
+     * @param streamKey 流键
+     * @param count     读取数量
+     * @return 消息列表
+     */
+    List<Map<String, Object>> streamRead(String streamKey, int count);
+
+    /**
+     * <p>
+     * 从Stream消费组中读取消息
+     * </p>
+     *
+     * @param streamKey    流键
+     * @param consumerGroup 消费组
+     * @param consumerName  消费者名称
+     * @param count         读取数量
+     * @return 消息列表
+     */
+    List<Map<String, Object>> streamReadGroup(String streamKey, String consumerGroup, String consumerName, int count);
+
+    /**
+     * <p>
+     * 创建Stream消费组
+     * </p>
+     *
+     * @param streamKey    流键
+     * @param consumerGroup 消费组
+     * @return 是否成功
+     */
+    Boolean streamCreateGroup(String streamKey, String consumerGroup);
+
+    /**
+     * <p>
+     * 删除Stream中的消息
+     * </p>
+     *
+     * @param streamKey 流键
+     * @param messageId 消息ID
+     * @return 删除的消息数量
+     */
+    Long streamDelete(String streamKey, String messageId);
+
+    /**
+     * <p>
+     * 获取Stream的长度
+     * </p>
+     *
+     * @param streamKey 流键
+     * @return 流的长度
+     */
+    Long streamLen(String streamKey);
+
 }

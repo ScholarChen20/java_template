@@ -15,10 +15,11 @@ import com.example.yoyo_data.infrastructure.repository.FollowMapper;
 import com.example.yoyo_data.infrastructure.repository.UserMapper;
 import com.example.yoyo_data.infrastructure.repository.UserProfileMapper;
 import com.example.yoyo_data.service.UserService;
-import com.example.yoyo_data.utils.JwtUtils;
+import com.example.yoyo_data.util.jwt.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -284,12 +285,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     }
 
     @Override
+    @Transactional
     public Result<Users> updateCurrentUser(String token, Users users) {
         try {
             // 1. 验证token的userId与当前用户id一致
-            String userStr = redisService.stringGetString(USER_TOKEN_PREFIX+ token);
-            Users currentUser = JSON.parseObject(userStr, Users.class);
-            if (!currentUser.getId().equals(users.getId())) {
+            String cacheKey = USER_TOKEN_PREFIX + token;
+            JwtUserDTO jwtUserDTO = redisService.getCacheObject(cacheKey);
+
+            if (!jwtUserDTO.getId().equals(users.getId())) {
                 return Result.error("用户id字段不一致");
             }
 
@@ -303,23 +306,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
 
             // 3. 更新数据到数据库
             baseMapper.updateById(users);
+            // 4. 删除原有的缓存
+            redisService.delete(USER_TOKEN_PREFIX + token);
 
-            // 4. 重新生成 token
+            // 5. 重新生成 token
             JwtUserDTO jwtUser = new JwtUserDTO();
-            jwtUser.setId(users.getId().longValue());
+            jwtUser.setAvatar(users.getAvatarUrl());
+            jwtUser.setId(users.getId());
             jwtUser.setUsername(users.getUserName());
             jwtUser.setEmail(users.getEmail());
             jwtUser.setPhone(users.getPhone());
-
             String newToken = jwtUtils.generateToken(jwtUser);
 
-            // 5. 缓存用户信息到Redis（7天过期）
-            String cacheKey = USER_TOKEN_PREFIX + newToken;
+            // 6. 缓存用户信息到Redis（7天过期）
             redisService.objectSetObject(cacheKey, jwtUser, SEVEN_DAYS);
-
-             // 6. 删除原有的缓存
-            redisService.delete(USER_TOKEN_PREFIX + token);
-
 
             log.info("更新当前用户信息成功: token={}, username={}", newToken, users.getUserName());
             return Result.success(users);
@@ -335,43 +335,41 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
         try {
             // 1. 从redis中取出用户信息
             String cacheKey = USER_TOKEN_PREFIX + token;
-            String userStr = redisService.stringGetString(cacheKey);
-            if (userStr == null) {
+            JwtUserDTO jwtUserDTO = redisService.getCacheObject(cacheKey);
+            if (jwtUserDTO == null) {
                 return Result.error("用户未登录或token已过期");
             }
 
-            // 2. 解析用户信息
-            Users user = JSON.parseObject(userStr, Users.class);
-            if (user == null) {
-                return Result.error("无法获取用户信息");
-            }
+            // 2. 解析用户id
+            long userId = jwtUserDTO.getId();
 
             // 3. 缓存键
-            String profileCacheKey = USER_PROFILE_PREFIX + user.getId();
+            String profileCacheKey = USER_PROFILE_PREFIX + userId;
 
             // 4. 尝试从缓存获取用户档案
-            String cachedProfile = redisService.stringGetString(profileCacheKey);
-            if (cachedProfile != null) {
-                UserProfile profile = JSON.parseObject(cachedProfile, UserProfile.class);
-                log.info("从缓存获取用户档案成功: userId={}", user.getId());
-                return Result.success(profile);
+            String userProfileStr = redisService.stringGetString(profileCacheKey);
+            if (userProfileStr != null) {
+                UserProfile userProfile = (UserProfile) JSON.parseObject(userProfileStr, UserProfile.class);
+                log.info("从缓存获取用户档案成功: userId={}", userId);
+                return Result.success(userProfile);
             }
 
-            // 5. 从数据库获取用户档案
+            // 5. 缓存没有则从数据库获取用户档案
             UserProfile profile = userProfileMapper.selectOne(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserProfile>()
-                            .eq(UserProfile::getUserId, user.getId())
+                    new LambdaQueryWrapper<UserProfile>()
+                            .eq(UserProfile::getUserId, userId)
             );
 
             // 6. 如果用户档案不存在，返回空结果
             if (profile == null) {
+                log.info("用户档案不存在: userId={}", userId);
                 return Result.success(null);
             }
 
             // 7. 存入缓存，设置过期时间为2小时
             redisService.stringSetString(profileCacheKey, JSON.toJSONString(profile), TWO_HOURS);
 
-            log.info("获取当前用户个人资料成功: token={}, userId={}", token, user.getId());
+            log.info("获取当前用户个人资料成功: token={}, userId={}", token, userId);
             return Result.success(profile);
 
         } catch (Exception e) {
@@ -384,27 +382,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
     public Result<UserProfile> updateCurrentUserProfile(String token, UpdateUserProfileRequest requestBody) {
         try {
             // 1. 从redis中取出用户信息
-            String userStr = redisService.stringGetString(USER_TOKEN_PREFIX + token);
-            if (userStr == null) {
+            String cacheKey = USER_TOKEN_PREFIX + token;
+            JwtUserDTO jwtUserDTO = redisService.getCacheObject(cacheKey);
+            if (jwtUserDTO == null) {
                 return Result.error("用户未登录或token已过期");
             }
 
             // 2. 解析用户信息
-            Users user = JSON.parseObject(userStr, Users.class);
-            if (user == null) {
-                return Result.error("无法获取用户信息");
-            }
+            long userId = jwtUserDTO.getId();
 
             // 3. 从数据库获取用户档案
             UserProfile profile = userProfileMapper.selectOne(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserProfile>()
-                            .eq(UserProfile::getUserId, user.getId())
+                    new LambdaQueryWrapper<UserProfile>()
+                            .eq(UserProfile::getUserId, userId)
             );
 
             // 4. 如果用户档案不存在，创建新的
             if (profile == null) {
                 profile = new UserProfile();
-                profile.setUserId(user.getId());
+                profile.setUserId(userId);
                 profile.setCreatedAt(java.time.LocalDateTime.now());
             }
 
@@ -431,16 +427,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
             if (requestBody.getVisitedCities() != null) {
                 profile.setVisitedCities(requestBody.getVisitedCities());
             }
+            if (requestBody.getTravelStats() != null) {
+                profile.setTravelStats(requestBody.getTravelStats());
+            }
             profile.setUpdatedAt(java.time.LocalDateTime.now());
 
             // 6. 保存到数据库
+            String profileCacheKey = USER_PROFILE_PREFIX + userId;
             if (profile.getId() == null) {
                 userProfileMapper.insert(profile);
             } else {
-                userProfileMapper.updateById(profile);
+                LambdaQueryWrapper<UserProfile> lambdaQueryWrapper = new LambdaQueryWrapper<UserProfile>()
+                        .eq(UserProfile::getId, profile.getId());
+                userProfileMapper.update(profile, lambdaQueryWrapper);
+                // 7. 删除缓存 --保证数据一致性
+                redisService.delete(profileCacheKey);
             }
 
-            log.info("更新当前用户个人资料成功: token={}, userId={}", token, user.getId());
+
+            log.info("更新当前用户个人资料成功: token={}, userId={}", token, userId);
             return Result.success(profile);
 
         } catch (Exception e) {
@@ -465,5 +470,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, Users> implements U
             log.error("根据ID获取用户失败", e);
             return Result.error("根据ID获取用户失败: " + e.getMessage());
         }
+    }
+
+    @Override
+    public boolean isActive(Long id) {
+        return userMapper.isActive(id);
+    }
+
+    @Override
+    public boolean activeUser(Long id) {
+        return userMapper.activeUser(id);
     }
 }

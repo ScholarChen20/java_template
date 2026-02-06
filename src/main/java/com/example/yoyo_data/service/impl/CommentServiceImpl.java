@@ -8,7 +8,7 @@ import com.example.yoyo_data.common.pojo.Post;
 import com.example.yoyo_data.infrastructure.repository.CommentMapper;
 import com.example.yoyo_data.infrastructure.repository.PostMapper;
 import com.example.yoyo_data.service.CommentService;
-import com.example.yoyo_data.utils.JwtUtils;
+import com.example.yoyo_data.util.jwt.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;

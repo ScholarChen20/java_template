@@ -1,24 +1,25 @@
-package com.example.yoyo_data.support.exception;
+package com.example.yoyo_data.common.exception;
 
 /**
- * 系统异常基类 - 所有系统异常的父类
- * 用于表示系统内部错误（非业务错误）
+ * 参数验证异常 - 表示请求参数验证失败
+ * 用于参数验证层抛出验证失败错误
  *
  * @author Template Framework
  * @version 1.0
  */
-public class SystemException extends RuntimeException {
+public class ValidationException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
     private int code;
     private String message;
+    private String field;
 
     /**
      * 默认构造方法
      */
-    public SystemException() {
-        this(500, "系统内部错误");
+    public ValidationException() {
+        this(400, "参数验证失败");
     }
 
     /**
@@ -26,8 +27,8 @@ public class SystemException extends RuntimeException {
      *
      * @param message 错误信息
      */
-    public SystemException(String message) {
-        this(500, message);
+    public ValidationException(String message) {
+        this(400, message);
     }
 
     /**
@@ -36,32 +37,34 @@ public class SystemException extends RuntimeException {
      * @param code 错误码
      * @param message 错误信息
      */
-    public SystemException(int code, String message) {
+    public ValidationException(int code, String message) {
         super(message);
         this.code = code;
         this.message = message;
     }
 
     /**
-     * 根据错误信息和原因构造
+     * 根据字段名和错误信息构造
      *
+     * @param field 字段名
      * @param message 错误信息
-     * @param cause 原因异常
      */
-    public SystemException(String message, Throwable cause) {
-        this(500, message, cause);
+    public ValidationException(String field, String message) {
+        this(400, message);
+        this.field = field;
     }
 
     /**
-     * 根据错误码、错误信息和原因构造
+     * 根据错误码、字段名和错误信息构造
      *
      * @param code 错误码
+     * @param field 字段名
      * @param message 错误信息
-     * @param cause 原因异常
      */
-    public SystemException(int code, String message, Throwable cause) {
-        super(message, cause);
+    public ValidationException(int code, String field, String message) {
+        super(message);
         this.code = code;
+        this.field = field;
         this.message = message;
     }
 
@@ -80,5 +83,13 @@ public class SystemException extends RuntimeException {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public String getField() {
+        return field;
+    }
+
+    public void setField(String field) {
+        this.field = field;
     }
 }

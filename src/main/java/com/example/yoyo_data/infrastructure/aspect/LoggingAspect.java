@@ -1,7 +1,6 @@
 package com.example.yoyo_data.infrastructure.aspect;
 
-import com.example.yoyo_data.infrastructure.utils.DateTimeUtils;
-import com.example.yoyo_data.infrastructure.utils.ThreadLocalUtils;
+import com.example.yoyo_data.util.ThreadLocalUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;

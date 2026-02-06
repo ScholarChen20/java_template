@@ -1,4 +1,4 @@
-package com.example.yoyo_data.infrastructure.utils;
+package com.example.yoyo_data.util;
 
 import com.example.yoyo_data.common.Result;
 

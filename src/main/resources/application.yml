@@ -1,6 +1,6 @@
 spring:
   profiles:
-    active: dev
+    active: dev   # 默认开发环境
   application:
     name: yoyo_data
   main:
@@ -35,15 +35,15 @@ spring:
     throw-exception-if-no-handler-found: true
   web:
     resources:
-      add-mappings: true
+      add-mappings: true  # 允许静态资源映射
   data:
     mongodb:
       uri: mongodb://localhost:27017/test
 
 jwt:
-  secret: TkyvN/nNzFSD7P9HknIAOjsGYi2xxzH6O2KXUGBbvTDoppofvlcspkENRR2KymyS3rlVBKRl60a9wJnk4IC4xw==
-  expiration: 86400000
-  token-expire: 86400000
+  secret: TkyvN/nNzFSD7P9HknIAOjsGYi2xxzH6O2KXUGBbvTDoppofvlcspkENRR2KymyS3rlVBKRl60a9wJnk4IC4xw==  # 密钥
+  expiration: 864000000
+  token-expire: 864000000
   token-type: Bearer
   header-name: Authorization
 

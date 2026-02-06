@@ -1,4 +1,4 @@
-package com.example.yoyo_data.support.exception;
+package com.example.yoyo_data.common.exception;
 
 /**
  * 业务异常 - 表示业务逻辑错误

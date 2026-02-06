@@ -1,4 +1,4 @@
-package com.example.yoyo_data.utils.oss;
+package com.example.yoyo_data.util.storage;
 
 import java.io.*;
 import java.util.Random;

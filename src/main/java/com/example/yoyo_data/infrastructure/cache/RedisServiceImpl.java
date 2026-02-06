@@ -8,10 +8,18 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.connection.stream.Consumer;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.ReadOffset;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -28,6 +36,7 @@ import java.util.stream.Collectors;
  */
 @Service
 public class RedisServiceImpl implements RedisService {
+    private static final Logger log = LoggerFactory.getLogger(RedisServiceImpl.class);
     @Autowired
     private RedisTemplate redisTemplate;
     @Autowired
@@ -539,5 +548,108 @@ public class RedisServiceImpl implements RedisService {
     @Override
     public Boolean setIfAbsent(String key, String value, long timeout, TimeUnit unit) {
         return this.redisTemplate.opsForValue().setIfAbsent(key, value, timeout, unit);
+    }
+
+    @Override
+    public String streamAdd(String streamKey, Map<String, Object> values) {
+        String fullStreamKey = appName + ":" + streamKey;
+        try {
+            RecordId recordId = redisTemplate.opsForStream().add(fullStreamKey, values);
+            return recordId != null ? recordId.getValue() : null;
+        } catch (Exception e) {
+            log.error("添加Stream消息失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> streamRead(String streamKey, int count) {
+        String fullStreamKey = appName + ":" + streamKey;
+        try {
+            StreamOffset<String> offset = StreamOffset.create(fullStreamKey, ReadOffset.lastConsumed());
+            StreamReadOptions options = StreamReadOptions.empty().count(count);
+            List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().read(options, offset);
+            List<Map<String, Object>> result = new ArrayList<>();
+            if (records != null) {
+                for (MapRecord<String, Object, Object> record : records) {
+                    Map<String, Object> message = new HashMap<>();
+                    message.put("id", record.getId().getValue());
+                    Map<String, Object> content = new HashMap<>();
+                    Map<Object, Object> value = record.getValue();
+                    for (Map.Entry<Object, Object> entry : value.entrySet()) {
+                        content.put(entry.getKey().toString(), entry.getValue());
+                    }
+                    message.put("content", content);
+                    result.add(message);
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("读取Stream消息失败: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> streamReadGroup(String streamKey, String consumerGroup, String consumerName, int count) {
+        String fullStreamKey = appName + ":" + streamKey;
+        try {
+            Consumer consumer = Consumer.from(consumerGroup, consumerName);
+            StreamOffset<String> offset = StreamOffset.create(fullStreamKey, ReadOffset.lastConsumed());
+            StreamReadOptions options = StreamReadOptions.empty().count(count);
+            List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().read(consumer, options, offset);
+            List<Map<String, Object>> result = new ArrayList<>();
+            if (records != null) {
+                for (MapRecord<String, Object, Object> record : records) {
+                    Map<String, Object> message = new HashMap<>();
+                    message.put("id", record.getId().getValue());
+                    Map<String, Object> content = new HashMap<>();
+                    Map<Object, Object> value = record.getValue();
+                    for (Map.Entry<Object, Object> entry : value.entrySet()) {
+                        content.put(entry.getKey().toString(), entry.getValue());
+                    }
+                    message.put("content", content);
+                    result.add(message);
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("从消费组读取Stream消息失败: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public Boolean streamCreateGroup(String streamKey, String consumerGroup) {
+        String fullStreamKey = appName + ":" + streamKey;
+        try {
+            redisTemplate.opsForStream().createGroup(fullStreamKey, consumerGroup);
+            return true;
+        } catch (Exception e) {
+            log.error("创建Stream消费组失败: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public Long streamDelete(String streamKey, String messageId) {
+        String fullStreamKey = appName + ":" + streamKey;
+        try {
+            return redisTemplate.opsForStream().delete(fullStreamKey, messageId);
+        } catch (Exception e) {
+            log.error("删除Stream消息失败: {}", e.getMessage());
+            return 0L;
+        }
+    }
+
+    @Override
+    public Long streamLen(String streamKey) {
+        String fullStreamKey = appName + ":" + streamKey;
+        try {
+            return redisTemplate.opsForStream().size(fullStreamKey);
+        } catch (Exception e) {
+            log.error("获取Stream长度失败: {}", e.getMessage());
+            return 0L;
+        }
     }
 }

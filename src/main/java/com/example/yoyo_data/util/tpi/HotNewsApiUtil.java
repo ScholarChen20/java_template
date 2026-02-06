@@ -1,4 +1,4 @@
-package com.example.yoyo_data.utils;
+package com.example.yoyo_data.util.tpi;
 
 import com.example.yoyo_data.common.document.HotNewsMain;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,4 +1,4 @@
-package com.example.yoyo_data.infrastructure.utils;
+package com.example.yoyo_data.util;
 
 /**
  * ThreadLocal上下文管理工具 - 用于在请求处理过程中管理线程本地变量
