@@ -1,9 +1,13 @@
 package com.example.yoyo_data.controller;
 
+import com.alibaba.fastjson.JSON;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.request.CreatePostRequest;
 import com.example.yoyo_data.common.dto.request.UpdatePostRequest;
+import com.example.yoyo_data.infrastructure.message.KafkaProducerTemplate;
+import com.example.yoyo_data.infrastructure.message.post.PostMessageEvent;
 import com.example.yoyo_data.service.PostService;
+import com.example.yoyo_data.util.jwt.JwtUtils;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -24,6 +28,9 @@ public class PostController {
 
     @Autowired
     private PostService postService;
+
+    @Autowired
+    private JwtUtils  jwtUtils;
 
     /**
      * 获取帖子列表
@@ -73,9 +80,13 @@ public class PostController {
             HttpServletRequest requestHttp
     ) {
         log.info("创建帖子: title={}, category={}, tags={}", request.getTitle(), request.getCategory(), request.getTags());
-        // 这里需要从请求中获取当前用户ID，暂时硬编码为1
-        Long userId = 1L;
-        return postService.createPost(userId, request);
+        String token = jwtUtils.getToken(requestHttp);
+        try {
+            return postService.sendCreatePostMsg(request, token);
+        } catch (Exception e) {
+            log.error("处理帖子创建请求异常: title={}", request.getTitle(), e);
+            return Result.error("处理请求失败，请稍后重试");
+        }
     }
 
     /**
