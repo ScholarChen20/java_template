@@ -497,6 +497,15 @@ public class RedisServiceImpl implements RedisService {
     }
 
     /**
+     * @return
+     */
+    @Override
+    public Long dbSize() {
+        Set<String> keys = redisTemplate.keys("*");
+        return (long) keys.size();
+    }
+
+    /**
      * {@inheritDoc}
      */
     @Override

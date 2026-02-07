@@ -2,9 +2,9 @@ package com.example.yoyo_data.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.example.yoyo_data.common.enums.UserLevel;
-import com.example.yoyo_data.common.pojo.Follow;
-import com.example.yoyo_data.common.pojo.UserLevelInfo;
-import com.example.yoyo_data.common.pojo.Users;
+import com.example.yoyo_data.common.entity.Follow;
+import com.example.yoyo_data.common.entity.UserLevelInfo;
+import com.example.yoyo_data.common.entity.Users;
 import com.example.yoyo_data.infrastructure.repository.FollowMapper;
 import com.example.yoyo_data.infrastructure.repository.UserMapper;
 import com.example.yoyo_data.service.UserLevelService;

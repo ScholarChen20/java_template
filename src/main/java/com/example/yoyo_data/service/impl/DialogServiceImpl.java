@@ -1,17 +1,22 @@
 package com.example.yoyo_data.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.example.yoyo_data.common.constant.EventType;
+import com.example.yoyo_data.common.constant.KafkaTopic;
 import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.document.DialogSession;
 import com.example.yoyo_data.common.dto.DialogSessionDTO;
 import com.example.yoyo_data.common.dto.PageResponseDTO;
+import com.example.yoyo_data.infrastructure.message.KafkaProducerTemplate;
+import com.example.yoyo_data.infrastructure.message.MessageEvent;
 import com.example.yoyo_data.infrastructure.repository.mongodb.DialogSessionRepository;
 import com.example.yoyo_data.service.DialogService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -27,6 +32,9 @@ public class DialogServiceImpl implements DialogService {
 
     @Autowired
     private RedisService redisService;
+
+    @Autowired
+    private KafkaProducerTemplate kafkaProducerTemplate;
 
     private static final String DIALOG_CACHE_PREFIX = "dialog:";
     private static final String DIALOG_LIST_CACHE_PREFIX = "dialog:list:";
@@ -74,10 +82,15 @@ public class DialogServiceImpl implements DialogService {
                     .isArchived(false)
                     .build();
 
+            // 保存到MongoDB
             dialogSession = dialogSessionRepository.save(dialogSession);
 
             // 清除列表缓存
             clearDialogListCache(userId);
+
+            // 发送Kafka事件 - 对话创建
+            sendDialogEvent(EventType.DIALOG_CREATE, KafkaTopic.DIALOG_CREATED,
+                dialogSession.getId(), userId, recipientId, "对话创建成功");
 
             log.info("创建对话成功: userId={}, recipientId={}", userId, recipientId);
             return Result.success(convertToDTO(dialogSession));
@@ -230,11 +243,17 @@ public class DialogServiceImpl implements DialogService {
             dialog.setLastMessageAt(new Date());
             dialog.setUpdatedAt(new Date());
 
+            // 保存到MongoDB
             dialogSessionRepository.save(dialog);
 
             // 清除缓存
             clearDialogCache(dialogId);
             clearDialogListCache(userId);
+
+            // 发送Kafka事件 - 消息发送
+            Long recipientId = dialog.getRecipientId();
+            sendMessageEvent(EventType.MESSAGE_SEND, KafkaTopic.MESSAGE_SENT,
+                dialog.getId(), userId, recipientId, message.getId(), content);
 
             DialogSessionDTO.MessageDTO messageDTO = convertMessageToDTO(message);
 
@@ -324,11 +343,17 @@ public class DialogServiceImpl implements DialogService {
             DialogSession dialog = dialogOpt.get();
             dialog.setUnreadCount(0);
             dialog.setUpdatedAt(new Date());
+
+            // 保存到MongoDB
             dialogSessionRepository.save(dialog);
 
             // 清除缓存
             clearDialogCache(dialogId);
             clearDialogListCache(userId);
+
+            // 发送Kafka事件 - 消息已读
+            sendDialogEvent(EventType.MESSAGE_READ, KafkaTopic.MESSAGE_STATUS_UPDATED,
+                String.valueOf(dialogId), userId, dialog.getRecipientId(), "消息状态更新成功");
 
             log.info("更新消息状态成功: dialogId={}, userId={}", dialogId, userId);
             return Result.success(convertToDTO(dialog));
@@ -360,11 +385,19 @@ public class DialogServiceImpl implements DialogService {
             DialogSession dialog = dialogOpt.get();
             dialog.setIsArchived(isArchived);
             dialog.setUpdatedAt(new Date());
+
+            // 保存到MongoDB
             dialogSessionRepository.save(dialog);
 
             // 清除缓存
             clearDialogCache(dialogId);
             clearDialogListCache(userId);
+
+            // 发送Kafka事件 - 对话归档
+            String eventType = isArchived ? EventType.DIALOG_ARCHIVE : EventType.DIALOG_UNARCHIVE;
+            sendDialogEvent(eventType, KafkaTopic.DIALOG_ARCHIVED,
+                String.valueOf(dialogId), userId, dialog.getRecipientId(),
+                isArchived ? "对话归档成功" : "对话取消归档成功");
 
             log.info("{}对话成功: dialogId={}, userId={}", isArchived ? "归档" : "取消归档", dialogId, userId);
             return Result.success(convertToDTO(dialog));
@@ -435,6 +468,84 @@ public class DialogServiceImpl implements DialogService {
         Set<String> keys = redisService.keys(DIALOG_LIST_CACHE_PREFIX + userId + ":*");
         if (keys != null && !keys.isEmpty()) {
             redisService.delete(keys);
+        }
+    }
+
+    /**
+     * 发送对话事件到Kafka
+     *
+     * @param eventType 事件类型
+     * @param topic Kafka主题
+     * @param dialogId 对话ID
+     * @param userId 用户ID
+     * @param recipientId 接收者ID
+     * @param message 消息内容
+     */
+    private void sendDialogEvent(String eventType, String topic, String dialogId,
+                                  Long userId, Long recipientId, String message) {
+        try {
+            Map<String, Object> eventData = new HashMap<>();
+            eventData.put("dialogId", dialogId);
+            eventData.put("userId", userId);
+            eventData.put("recipientId", recipientId);
+            eventData.put("message", message);
+            eventData.put("timestamp", System.currentTimeMillis());
+
+            MessageEvent event = MessageEvent.builder()
+                    .eventType(eventType)
+                    .source("DialogService")
+                    .userId(userId)
+                    .data(JSON.toJSONString(eventData))
+                    .timestamp(LocalDateTime.now())
+                    .createdAt(LocalDateTime.now())
+                    .priority(5)
+                    .build();
+
+            kafkaProducerTemplate.sendEvent(topic, event);
+            log.info("发送对话事件成功: eventType={}, dialogId={}, userId={}", eventType, dialogId, userId);
+
+        } catch (Exception e) {
+            log.error("发送对话事件失败: eventType={}, dialogId={}", eventType, dialogId, e);
+        }
+    }
+
+    /**
+     * 发送消息事件到Kafka
+     *
+     * @param eventType 事件类型
+     * @param topic Kafka主题
+     * @param dialogId 对话ID
+     * @param senderId 发送者ID
+     * @param recipientId 接收者ID
+     * @param messageId 消息ID
+     * @param content 消息内容
+     */
+    private void sendMessageEvent(String eventType, String topic, String dialogId,
+                                   Long senderId, Long recipientId, String messageId, String content) {
+        try {
+            Map<String, Object> eventData = new HashMap<>();
+            eventData.put("dialogId", dialogId);
+            eventData.put("messageId", messageId);
+            eventData.put("senderId", senderId);
+            eventData.put("recipientId", recipientId);
+            eventData.put("content", content);
+            eventData.put("timestamp", System.currentTimeMillis());
+
+            MessageEvent event = MessageEvent.builder()
+                    .eventType(eventType)
+                    .source("DialogService")
+                    .userId(senderId)
+                    .data(JSON.toJSONString(eventData))
+                    .timestamp(LocalDateTime.now())
+                    .createdAt(LocalDateTime.now())
+                    .priority(7) // 消息发送优先级较高
+                    .build();
+
+            kafkaProducerTemplate.sendEvent(topic, event);
+            log.info("发送消息事件成功: eventType={}, dialogId={}, messageId={}", eventType, dialogId, messageId);
+
+        } catch (Exception e) {
+            log.error("发送消息事件失败: eventType={}, dialogId={}", eventType, dialogId, e);
         }
     }
 }
