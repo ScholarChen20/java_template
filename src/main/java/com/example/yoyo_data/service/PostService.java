@@ -4,6 +4,8 @@ import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.request.CreatePostRequest;
 import com.example.yoyo_data.common.dto.request.UpdatePostRequest;
 
+import javax.servlet.http.HttpServletRequest;
+
 /**
  * 帖子服务接口
  */
@@ -53,4 +55,6 @@ public interface PostService {
      * @return 删除结果
      */
     Result<?> deletePost(Long postId, Long userId);
+
+    Result<?>  sendCreatePostMsg(CreatePostRequest request, String  token);
 }

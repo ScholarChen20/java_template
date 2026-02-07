@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -163,5 +164,18 @@ public class JwtUtils {
             log.error("刷新Token失败", e);
         }
         return null;
+    }
+
+    public String getToken(HttpServletRequest httpServletRequest) {
+        try {
+            String token = httpServletRequest.getHeader("Authorization");
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
+            }
+            return token;
+        }catch (Exception e) {
+            log.info("用户未登录或token已过期");
+            return null;
+        }
     }
 }

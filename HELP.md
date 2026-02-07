@@ -21,3 +21,6 @@ The following guides illustrate how to use some features concretely:
 * [Messaging with RabbitMQ](https://spring.io/guides/gs/messaging-rabbitmq/)
 * [MyBatis Quick Start](https://github.com/mybatis/spring-boot-starter/wiki/Quick-Start)
 
+.\minio.exe server C:\minio --console-address :9090
+bin\windows\zookeeper-server-start.bat config\zookeeper.properties   启动Zookeeper
+bin\windows\kafka-server-start.bat config\server.properties     启动kafka

@@ -111,6 +111,14 @@ public class CacheKeyManager {
      * 未读消息数量缓存键前缀
      */
     public static final String UNREAD_COUNT_PREFIX = "dialog:unread:";
+     /**
+     * 帖子详情前缀
+     */
+    public static final String POST_DETAIL_PREFIX = "post:detail:";
+    /**
+     * 帖子列表前缀
+     */
+    public static final String POST_LIST_PREFIX = "post:list::";
 
 
     /**

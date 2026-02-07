@@ -1,5 +1,6 @@
 package com.example.yoyo_data.controller;
 
+import cn.hutool.jwt.JWTUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -10,6 +11,7 @@ import com.example.yoyo_data.common.entity.Users;
 import com.example.yoyo_data.common.vo.UserPageVO;
 import com.example.yoyo_data.infrastructure.repository.UserMapper;
 import com.example.yoyo_data.service.UserService;
+import com.example.yoyo_data.util.jwt.JwtUtils;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -34,6 +36,8 @@ public class UserController {
     private UserService userService;
     @Autowired
     private UserMapper userMapper;
+    @Autowired
+    private JwtUtils jwtUtils;
 
     /**
      * 获取当前用户信息
@@ -45,10 +49,7 @@ public class UserController {
     @ApiOperation(value = "获取当前用户信息", notes = "获取当前登录用户的详细信息")
     public Result<Users> getCurrentUser(HttpServletRequest request) {
         // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
+        String token = jwtUtils.getToken(request);
         return userService.getCurrentUser(token);
     }
 
@@ -61,10 +62,7 @@ public class UserController {
     @ApiOperation(value = "更新当前用户信息", notes = "更新当前登录用户的信息")
     public Result<Users> updateCurrentUser(@ApiParam(value = "更新参数") @RequestBody Users users, HttpServletRequest request) {
         // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
+        String token = jwtUtils.getToken(request);
         return userService.updateCurrentUser(token, users);
     }
 
@@ -77,11 +75,7 @@ public class UserController {
     @GetMapping("/me/profile")
     @ApiOperation(value = "获取当前用户档案", notes = "获取当前登录用户的详细档案信息")
     public Result<UserProfile> getCurrentUserProfile(HttpServletRequest request) {
-        // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
+        String token = jwtUtils.getToken(request);
         return userService.getCurrentUserProfile(token);
     }
 
@@ -96,10 +90,7 @@ public class UserController {
     @ApiOperation(value = "更新当前用户档案", notes = "更新当前登录用户的档案信息")
     public Result<UserProfile> updateCurrentUserProfile(@ApiParam(value = "更新参数") @RequestBody UpdateUserProfileRequest requestBody, HttpServletRequest request) {
         // 从请求头获取token
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
+        String token = jwtUtils.getToken(request);
         return userService.updateCurrentUserProfile(token, requestBody);
     }
 
