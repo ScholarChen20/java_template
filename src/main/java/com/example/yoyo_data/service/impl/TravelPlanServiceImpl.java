@@ -1,17 +1,22 @@
 package com.example.yoyo_data.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.example.yoyo_data.common.constant.EventType;
+import com.example.yoyo_data.common.constant.KafkaTopic;
 import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.document.TravelPlan;
 import com.example.yoyo_data.common.dto.PageResponseDTO;
 import com.example.yoyo_data.common.dto.TravelPlanDTO;
+import com.example.yoyo_data.infrastructure.message.KafkaProducerTemplate;
+import com.example.yoyo_data.infrastructure.message.MessageEvent;
 import com.example.yoyo_data.infrastructure.repository.mongodb.TravelPlanRepository;
 import com.example.yoyo_data.service.TravelPlanService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -27,6 +32,9 @@ public class TravelPlanServiceImpl implements TravelPlanService {
 
     @Autowired
     private RedisService redisService;
+
+    @Autowired
+    private KafkaProducerTemplate kafkaProducerTemplate;
 
     private static final String TRAVEL_PLAN_CACHE_PREFIX = "travel_plan:";
     private static final String TRAVEL_PLAN_LIST_CACHE_PREFIX = "travel_plan:list:";
@@ -129,10 +137,15 @@ public class TravelPlanServiceImpl implements TravelPlanService {
                     .updatedAt(new Date())
                     .build();
 
+            // 保存到MongoDB
             plan = travelPlanRepository.save(plan);
 
             // 清除列表缓存
             clearTravelPlanListCache(userId);
+
+            // 发送Kafka事件 - 旅行计划创建
+            sendTravelPlanEvent(EventType.TRAVEL_PLAN_CREATE, KafkaTopic.TRAVEL_PLAN_CREATED,
+                plan.getId(), userId, "旅行计划创建成功");
 
             TravelPlanDTO result = convertToDTO(plan);
 
@@ -170,11 +183,16 @@ public class TravelPlanServiceImpl implements TravelPlanService {
             plan.setDays(calculateDays(startDate, endDate));
             plan.setUpdatedAt(new Date());
 
+            // 保存到MongoDB
             plan = travelPlanRepository.save(plan);
 
             // 清除缓存
             clearTravelPlanCache(planId);
             clearTravelPlanListCache(userId);
+
+            // 发送Kafka事件 - 旅行计划更新
+            sendTravelPlanEvent(EventType.TRAVEL_PLAN_UPDATE, KafkaTopic.TRAVEL_PLAN_UPDATED,
+                plan.getId(), userId, "旅行计划更新成功");
 
             TravelPlanDTO result = convertToDTO(plan);
 
@@ -198,11 +216,16 @@ public class TravelPlanServiceImpl implements TravelPlanService {
             TravelPlan plan = planOpt.get();
             Long userId = plan.getUserId();
 
+            // 从MongoDB删除
             travelPlanRepository.deleteById(String.valueOf(planId));
 
             // 清除缓存
             clearTravelPlanCache(planId);
             clearTravelPlanListCache(userId);
+
+            // 发送Kafka事件 - 旅行计划删除
+            sendTravelPlanEvent(EventType.TRAVEL_PLAN_DELETE, KafkaTopic.TRAVEL_PLAN_DELETED,
+                String.valueOf(planId), userId, "旅行计划删除成功");
 
             log.info("删除旅行计划成功: planId={}", planId);
             return Result.success("旅行计划删除成功");
@@ -284,6 +307,41 @@ public class TravelPlanServiceImpl implements TravelPlanService {
             return (int) (diffTime / (1000 * 60 * 60 * 24)) + 1;
         } catch (Exception e) {
             return 1;
+        }
+    }
+
+    /**
+     * 发送旅行计划事件到Kafka
+     *
+     * @param eventType 事件类型
+     * @param topic Kafka主题
+     * @param planId 计划ID
+     * @param userId 用户ID
+     * @param message 消息内容
+     */
+    private void sendTravelPlanEvent(String eventType, String topic, String planId, Long userId, String message) {
+        try {
+            Map<String, Object> eventData = new HashMap<>();
+            eventData.put("planId", planId);
+            eventData.put("userId", userId);
+            eventData.put("message", message);
+            eventData.put("timestamp", System.currentTimeMillis());
+
+            MessageEvent event = MessageEvent.builder()
+                    .eventType(eventType)
+                    .source("TravelPlanService")
+                    .userId(userId)
+                    .data(JSON.toJSONString(eventData))
+                    .timestamp(LocalDateTime.now())
+                    .createdAt(LocalDateTime.now())
+                    .priority(5)
+                    .build();
+
+            kafkaProducerTemplate.sendEvent(topic, event);
+            log.info("发送旅行计划事件成功: eventType={}, planId={}, userId={}", eventType, planId, userId);
+
+        } catch (Exception e) {
+            log.error("发送旅行计划事件失败: eventType={}, planId={}", eventType, planId, e);
         }
     }
 }
