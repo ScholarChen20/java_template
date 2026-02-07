@@ -3,8 +3,8 @@ package com.example.yoyo_data.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.request.UpdateUserProfileRequest;
-import com.example.yoyo_data.common.pojo.UserProfile;
-import com.example.yoyo_data.common.pojo.Users;
+import com.example.yoyo_data.common.entity.UserProfile;
+import com.example.yoyo_data.common.entity.Users;
 
 /**
  * 用户服务接口

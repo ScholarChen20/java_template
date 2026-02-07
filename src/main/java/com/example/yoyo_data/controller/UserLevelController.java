@@ -1,7 +1,7 @@
 package com.example.yoyo_data.controller;
 
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.common.pojo.UserLevelInfo;
+import com.example.yoyo_data.common.entity.UserLevelInfo;
 import com.example.yoyo_data.service.UserLevelService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;

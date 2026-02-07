@@ -1,7 +1,7 @@
 package com.example.yoyo_data.service;
 
 import com.example.yoyo_data.common.enums.UserLevel;
-import com.example.yoyo_data.common.pojo.UserLevelInfo;
+import com.example.yoyo_data.common.entity.UserLevelInfo;
 
 public interface UserLevelService {
 

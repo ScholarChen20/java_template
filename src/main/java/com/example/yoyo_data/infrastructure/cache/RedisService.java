@@ -542,6 +542,13 @@ public interface RedisService {
 
     /**
      * <p>
+     * 返回所有key的数量
+     * </p>
+     */
+     Long dbSize();
+
+    /**
+     * <p>
      * 删除
      * </p>
      *
@@ -656,5 +663,6 @@ public interface RedisService {
      * @return 流的长度
      */
     Long streamLen(String streamKey);
+
 
 }
