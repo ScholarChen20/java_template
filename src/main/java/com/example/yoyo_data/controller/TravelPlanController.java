@@ -1,8 +1,11 @@
 package com.example.yoyo_data.controller;
 
+import com.alibaba.fastjson.JSON;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.PageResponseDTO;
 import com.example.yoyo_data.common.dto.TravelPlanDTO;
+import com.example.yoyo_data.infrastructure.message.KafkaProducerTemplate;
+import com.example.yoyo_data.infrastructure.message.travelplan.TravelPlanMessageEvent;
 import com.example.yoyo_data.service.TravelPlanService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -10,6 +13,8 @@ import io.swagger.annotations.ApiParam;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
 
 /**
  * 旅行计划模块控制器
@@ -21,6 +26,9 @@ import org.springframework.web.bind.annotation.*;
 public class TravelPlanController {
     @Autowired
     private TravelPlanService travelPlanService;
+
+    @Autowired
+    private KafkaProducerTemplate kafkaProducerTemplate;
 
     /**
      * 获取旅行计划列表
@@ -69,7 +77,7 @@ public class TravelPlanController {
      */
     @PostMapping("/create")
     @ApiOperation(value = "创建旅行计划", notes = "创建新的旅行计划")
-    public Result<TravelPlanDTO> createTravelPlan(
+    public Result<?> createTravelPlan(
             @ApiParam(value = "用户ID", required = true) @RequestParam("userId") Long userId,
             @ApiParam(value = "标题", required = true) @RequestParam("title") String title,
             @ApiParam(value = "描述", required = true) @RequestParam("description") String description,
@@ -78,7 +86,36 @@ public class TravelPlanController {
             @ApiParam(value = "结束日期", required = true) @RequestParam("endDate") String endDate
     ) {
         log.info("创建旅行计划: userId={}, title={}, destination={}, startDate={}, endDate={}", userId, title, destination, startDate, endDate);
-        return travelPlanService.createTravelPlan(userId, title, description, destination, startDate, endDate);
+
+        try {
+            // 构建请求数据
+            HashMap<String, Object> requestData = new HashMap<>();
+            requestData.put("title", title);
+            requestData.put("description", description);
+            requestData.put("destination", destination);
+            requestData.put("startDate", startDate);
+            requestData.put("endDate", endDate);
+
+            // 构建旅行计划创建事件
+            String data = JSON.toJSONString(requestData);
+            TravelPlanMessageEvent event = TravelPlanMessageEvent.buildCreateEvent(userId, data, title, destination);
+
+            // 发送到Kafka队列
+            boolean sent = kafkaProducerTemplate.sendEvent("travel-plans-create", event);
+
+            if (sent) {
+                log.info("旅行计划创建请求已发送到队列: title={}, destination={}", title, destination);
+                // 立即返回"旅行计划创建中"响应
+                return Result.success("旅行计划创建中，请稍后查看结果");
+            } else {
+                log.error("旅行计划创建请求发送到队列失败: title={}, destination={}", title, destination);
+                return Result.error("请求发送失败，请稍后重试");
+            }
+
+        } catch (Exception e) {
+            log.error("处理旅行计划创建请求异常: title={}", title, e);
+            return Result.error("处理请求失败，请稍后重试");
+        }
     }
 
     /**

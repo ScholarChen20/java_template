@@ -199,9 +199,7 @@ CREATE TABLE IF NOT EXISTS captcha_records (
     INDEX idx_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='验证码记录表';
 
--- ============================================
--- 审计日志表
--- ============================================
+-- ============================================ 审计日志表-- ============================================
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -217,8 +215,34 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计日志表';
 
--- ============================================
--- 初始化完成
--- ============================================
+-- ============================================-- 插入默认数据-- ============================================
+
+-- 插入默认用户（密码哈希为：123456）
+INSERT INTO users (username, email, password_hash, role, is_active, is_verified) 
+VALUES ('testuser', 'test@example.com', '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'user', TRUE, TRUE)
+ON DUPLICATE KEY UPDATE username = username;
+
+-- 插入默认角色
+INSERT INTO roles (name, description) VALUES ('user', '普通用户'), ('admin', '管理员') ON DUPLICATE KEY UPDATE name = name;
+
+-- 插入默认权限
+INSERT INTO permissions (name, resource, action, description) VALUES 
+('创建帖子', 'posts', 'create', '允许创建帖子'),
+('查看帖子', 'posts', 'read', '允许查看帖子'),
+('更新帖子', 'posts', 'update', '允许更新帖子'),
+('删除帖子', 'posts', 'delete', '允许删除帖子'),
+('创建旅行计划', 'travel-plans', 'create', '允许创建旅行计划'),
+('查看旅行计划', 'travel-plans', 'read', '允许查看旅行计划'),
+('更新旅行计划', 'travel-plans', 'update', '允许更新旅行计划'),
+('删除旅行计划', 'travel-plans', 'delete', '允许删除旅行计划')
+ON DUPLICATE KEY UPDATE name = name;
+
+-- 为默认用户分配角色
+INSERT INTO user_roles (user_id, role_id) 
+SELECT u.id, r.id FROM users u, roles r 
+WHERE u.username = 'testuser' AND r.name = 'user'
+ON DUPLICATE KEY UPDATE user_id = user_id;
+
+-- ============================================-- 初始化完成-- ============================================
 
 SELECT '✅ MySQL数据库表初始化完成！' AS message;

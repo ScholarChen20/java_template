@@ -83,6 +83,16 @@ public class CacheKeyManager {
      */
     public static final String DISTRIBUTION_LOCK_KEY = "hot_news:distribution:lock:";
     /**
+     * 帖子详情前缀
+     */
+    public static final String POST_DETAIL_PREFIX = "post:detail:";
+    /**
+     * 帖子列表前缀
+     */
+    public static final String POST_LIST_PREFIX = "post:list::";
+
+
+    /**
      * 缓存默认过期时间（秒） 默认1小时
      */
     public static final long DEFAULT_TTL = 3600;
