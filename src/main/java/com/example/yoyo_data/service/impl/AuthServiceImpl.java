@@ -8,7 +8,7 @@ import com.example.yoyo_data.common.dto.request.*;
 import com.example.yoyo_data.common.dto.response.*;
 import com.example.yoyo_data.common.vo.UserVO;
 import com.example.yoyo_data.infrastructure.repository.UserMapper;
-import com.example.yoyo_data.common.pojo.Users;
+import com.example.yoyo_data.common.entity.Users;
 import com.example.yoyo_data.service.AuthService;
 import com.example.yoyo_data.common.exception.BusinessException;
 import com.example.yoyo_data.common.exception.SystemException;

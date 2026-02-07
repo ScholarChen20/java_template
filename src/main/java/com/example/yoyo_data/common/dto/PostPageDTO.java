@@ -1,6 +1,5 @@
 package com.example.yoyo_data.common.dto;
-
-import com.example.yoyo_data.common.pojo.Post;
+import com.example.yoyo_data.common.entity.Post;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
