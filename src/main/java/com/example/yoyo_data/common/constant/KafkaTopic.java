@@ -5,6 +5,15 @@ package com.example.yoyo_data.common.constant;
  * 定义系统中使用的所有Kafka主题
  */
 public class KafkaTopic {
+    // ==================== 评论相关主题 ====================
+    /**
+     * 评论删除事件主题
+     */
+    public static final String COMMENT_DELETE = "comment-delete";
+    /**
+     * 评论创建事件主题
+     */
+    public static final String COMMENT_CREATE = "comment-create";
 
     // ==================== 旅行计划相关主题 ====================
 
@@ -88,6 +97,8 @@ public class KafkaTopic {
      * 系统通知主题
      */
     public static final String SYSTEM_NOTIFICATION = "system-notification";
+
+    // ==================== 私有构造函数 ====================
 
     private KafkaTopic() {
         // 私有构造函数，防止实例化

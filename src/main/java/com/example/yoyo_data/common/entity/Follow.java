@@ -1,4 +1,4 @@
-package com.example.yoyo_data.common.pojo;
+package com.example.yoyo_data.common.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -10,34 +10,33 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 验证码记录表实体类
+ * 关注表实体类
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
-@TableName("captcha_records")
-public class CaptchaRecord implements Serializable {
-
+@TableName("follows")
+public class Follow implements Serializable {
+    /**
+     * 关注id
+     */
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
-
-    @TableField("session_id")
-    private String sessionId;
-
-    @TableField("captcha_code")
-    private String captchaCode;
-
-    @TableField("attempt_count")
-    private Integer attemptCount;
-
-    @TableField("is_verified")
-    private Boolean isVerified;
-
+    /**
+     * 关注者id
+     */
+    @TableField("follower_id")
+    private Long followerId;
+    /**
+     * 被关注者id
+     */
+    @TableField("following_id")
+    private Long followingId;
+    /**
+     * 创建时间
+     */
     @TableField("created_at")
     private LocalDateTime createdAt;
-
-    @TableField("expires_at")
-    private LocalDateTime expiresAt;
 }

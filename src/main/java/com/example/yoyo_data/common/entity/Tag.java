@@ -1,4 +1,4 @@
-package com.example.yoyo_data.common.pojo;
+package com.example.yoyo_data.common.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -10,27 +10,27 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 点赞表实体类
+ * 标签表实体类
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
-@TableName("likes")
-public class Like implements Serializable {
+@TableName("tags")
+public class Tag implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO)
-    private Long id;
+    private Integer id;
 
-    @TableField("user_id")
-    private Long userId;
+    @TableField("name")
+    private String name;
 
-    @TableField("target_type")
-    private String targetType;
+    @TableField("category")
+    private String category;
 
-    @TableField("target_id")
-    private Long targetId;
+    @TableField("use_count")
+    private Integer useCount;
 
     @TableField("created_at")
     private LocalDateTime createdAt;

@@ -83,6 +83,37 @@ public class CacheKeyManager {
      */
     public static final String DISTRIBUTION_LOCK_KEY = "hot_news:distribution:lock:";
     /**
+     * 点赞状态缓存键前缀
+     */
+    public static final String LIKE_STATUS_PREFIX = "like:status:";
+    /**
+     * 点赞列表缓存键前缀
+     */
+    public static final String LIKE_LIST_PREFIX = "like:list:";
+    /**
+     * 点赞排名缓存键前缀
+     */
+    public static final String LIKE_RANK_PREFIX = "like:rank:";
+    /**
+     * 点赞数量缓存键前缀
+     */
+    public static final String LIKE_COUNT_PREFIX = "like:count:";
+
+    /**
+     * 对话缓存键前缀
+     */
+    public static final String DIALOG_CACHE_PREFIX = "dialog:";
+    /**
+     * 会话列表缓存键前缀
+     */
+    public static final String DIALOG_LIST_CACHE_PREFIX = "dialog:list:";
+    /**
+     * 未读消息数量缓存键前缀
+     */
+    public static final String UNREAD_COUNT_PREFIX = "dialog:unread:";
+
+
+    /**
      * 缓存默认过期时间（秒） 默认1小时
      */
     public static final long DEFAULT_TTL = 3600;

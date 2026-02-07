@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.yoyo_data.infrastructure.repository.UserMapper">
 <!--    查询user列表-->
-    <select id="getUserPage" resultType="com.example.yoyo_data.common.pojo.Users">
+    <select id="getUserPage" resultType="com.example.yoyo_data.common.entity.Users">
         select id, username, email, phone, avatar_url, bio, role, is_active, is_verified, created_at, updated_at from Users
         <where>
             <if test="id !=null">

@@ -1,4 +1,4 @@
-package com.example.yoyo_data.common.pojo;
+package com.example.yoyo_data.common.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -7,39 +7,44 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.*;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 评论表实体类
+ * 统计数据类
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = false)
-@TableName("comments")
-public class Comment implements Serializable {
+@TableName("statistics")
+public class Statistics implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("post_id")
-    private Long postId;
-
     @TableField("user_id")
     private Long userId;
 
-    @TableField("parent_id")
-    private Long parentId;
+    @TableField("stat_type")
+    private String statType;
 
-    @TableField("content")
-    private String content;
+    @TableField("stat_date")
+    private LocalDate statDate;
 
-    @TableField("like_count")
-    private Integer likeCount;
+    @TableField("stat_key")
+    private String statKey;
 
-    @TableField("is_deleted")
-    private Boolean isDeleted;
+    @TableField("stat_value")
+    private Long statValue;
+
+    @TableField("stat_amount")
+    private BigDecimal statAmount;
+
+    @TableField("extra_data")
+    private String extraData;
 
     @TableField("created_at")
     private LocalDateTime createdAt;

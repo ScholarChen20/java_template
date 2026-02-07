@@ -1,4 +1,4 @@
-package com.example.yoyo_data.common.pojo;
+package com.example.yoyo_data.common.entity;
 
 import com.alibaba.fastjson.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.IdType;

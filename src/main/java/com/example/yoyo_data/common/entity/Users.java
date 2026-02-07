@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package com.example.yoyo_data.common.pojo;
+package com.example.yoyo_data.common.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import lombok.*;
 
 import java.io.Serializable;

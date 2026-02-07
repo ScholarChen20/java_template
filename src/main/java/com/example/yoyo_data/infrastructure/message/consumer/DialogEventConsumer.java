@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.*;
+
 /**
  * 对话事件消费者
  * 处理对话相关的Kafka事件
@@ -23,10 +25,6 @@ public class DialogEventConsumer extends KafkaConsumerTemplate {
 
     @Autowired
     private RedisService redisService;
-
-    private static final String DIALOG_CACHE_PREFIX = "dialog:";
-    private static final String DIALOG_LIST_CACHE_PREFIX = "dialog:list:";
-    private static final String UNREAD_COUNT_PREFIX = "dialog:unread:";
 
     /**
      * 监听对话创建事件
@@ -220,7 +218,7 @@ public class DialogEventConsumer extends KafkaConsumerTemplate {
     private void incrementUnreadCount(String dialogId, Long recipientId) {
         try {
             String unreadKey = UNREAD_COUNT_PREFIX + dialogId + ":" + recipientId;
-            redisService.increment(unreadKey);
+            redisService.stringIncrementLongString(unreadKey, 1L);
             log.debug("增加未读消息计数: dialogId={}, recipientId={}", dialogId, recipientId);
 
         } catch (Exception e) {

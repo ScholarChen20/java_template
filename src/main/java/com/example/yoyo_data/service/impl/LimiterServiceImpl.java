@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.infrastructure.repository.UserMapper;
-import com.example.yoyo_data.common.pojo.Users;
+import com.example.yoyo_data.common.entity.Users;
 import com.example.yoyo_data.service.LimiterService;
 import com.example.yoyo_data.util.encrypt.HashUtils;
 import com.example.yoyo_data.util.limiter.RRateLimiterUtils;
