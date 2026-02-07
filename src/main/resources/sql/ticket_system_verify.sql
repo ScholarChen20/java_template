@@ -40,7 +40,7 @@ SELECT
 FROM tb_seat s
 JOIN tb_show_event se ON s.show_event_id = se.id
 GROUP BY se.show_name, s.seat_zone, s.status
-ORDER BY se.id, s.seat_zone;
+ORDER BY s.seat_zone;
 
 -- 4. 验证座位编码唯一性
 SELECT '========== 座位编码唯一性验证 ==========' AS step;
