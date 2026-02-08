@@ -98,6 +98,28 @@ public class KafkaTopic {
      */
     public static final String SYSTEM_NOTIFICATION = "system-notification";
 
+    // ==================== 订单相关主题 ====================
+
+    /**
+     * 订单创建事件主题
+     */
+    public static final String ORDER_CREATE = "order-create";
+
+    /**
+     * 订单支付成功事件主题
+     */
+    public static final String ORDER_PAID = "order-paid";
+
+    /**
+     * 订单取消事件主题
+     */
+    public static final String ORDER_CANCEL = "order-cancel";
+
+    /**
+     * 订单超时事件主题
+     */
+    public static final String ORDER_TIMEOUT = "order-timeout";
+
     // ==================== 私有构造函数 ====================
 
     private KafkaTopic() {
