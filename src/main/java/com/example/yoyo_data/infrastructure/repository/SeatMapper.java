@@ -6,8 +6,11 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
+import javax.validation.constraints.NotEmpty;
+import javax.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 座位信息表 Mapper 接口
@@ -132,4 +135,5 @@ public interface SeatMapper extends BaseMapper<Seat> {
             "WHERE status = 'LOCKED' " +
             "AND lock_expire_time < #{now}")
     int releaseExpiredSeats(@Param("now") LocalDateTime now);
+
 }

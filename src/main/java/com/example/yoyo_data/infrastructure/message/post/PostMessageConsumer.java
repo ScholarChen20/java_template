@@ -2,14 +2,12 @@ package com.example.yoyo_data.infrastructure.message.post;
 
 import com.alibaba.fastjson.JSON;
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.common.dto.request.CreatePostRequest;
+import com.example.yoyo_data.common.dto.PostDTO;
 import com.example.yoyo_data.service.PostService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-
-import java.util.UUID;
 
 /**
  * 帖子消息消费者 - 用于处理帖子相关的Kafka消息
@@ -41,7 +39,7 @@ public class PostMessageConsumer {
                     event.getEventId(), event.getEventType(), event.getUserId());
 
             // 解析创建帖子请求数据
-            CreatePostRequest request = JSON.parseObject(event.getData(), CreatePostRequest.class);
+            PostDTO request = JSON.parseObject(event.getData(), PostDTO.class);
             log.info("解析帖子创建请求: title={}, category={}", request.getTitle(), request.getCategory());
 
             // 处理帖子创建

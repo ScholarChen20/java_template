@@ -661,4 +661,9 @@ public class RedisServiceImpl implements RedisService {
             return 0L;
         }
     }
+
+    @Override
+    public boolean setIfAbsent(String lockKey, String number, long grabLockExpire) {
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(lockKey, number, grabLockExpire, TimeUnit.MILLISECONDS));
+    }
 }

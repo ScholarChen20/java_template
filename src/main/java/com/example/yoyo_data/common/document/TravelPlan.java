@@ -34,8 +34,8 @@ public class TravelPlan {
     @Field("description")
     private String description;
 
-    @Field("destination")
-    private String destination;
+    @Field("city")
+    private String city;
 
     @Field("start_date")
     private String startDate;
@@ -44,19 +44,19 @@ public class TravelPlan {
     private String endDate;
 
     @Field("days")
-    private Integer days;
-
-    @Field("daily_itinerary")
-    private List<DailyItinerary> dailyItinerary;
+    private List<Days> days;
 
     @Field("budget")
-    private Double budget;
+    private Budget budget;
+
+    @Field("weather_info")
+    private List<WeatherInfo> weather_info;
+
+    @Field("overall_suggestions")
+    private String overallSuggestions;
 
     @Field("status")
     private String status;
-
-    @Field("metadata")
-    private Map<String, Object> metadata;
 
     @Field("created_at")
     private Date createdAt;
@@ -68,10 +68,154 @@ public class TravelPlan {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class DailyItinerary {
-        private Integer day;
+    public static class Budget {
+        @Field("total_attractions")
+        private Double totalAttractions;
+
+        @Field("total_hotels")
+        private Double totalHotels;
+
+        @Field("total_meals")
+        private Double totalMeals;
+
+        @Field("total_transportation")
+        private Double totalTransportation;
+
+        @Field("total")
+        private Double total;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Days {
+        /** 日期 */
+        @Field("date")
         private String date;
-        private List<String> activities;
-        private Map<String, Object> metadata;
+        /** 天数索引 */
+        @Field("day_index")
+        private Integer dayIndex;
+        /** 描述 */
+        @Field("description")
+        private String description;
+        /** 交通 */
+        @Field("transportation")
+        private String transportation;
+        /** 住宿 */
+        @Field("accommodation")
+        private String accommodation;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Hotel {
+        @Field("name")
+        private String name;
+
+        @Field("address")
+        private String address;
+
+        @Field("location")
+        private Location location;
+
+        @Field("price_range")
+        private String priceRange;
+
+        @Field("rating")
+        private String rating;
+
+        @Field("distance")
+        private String distance;
+
+        @Field("type")
+        private String type;
+
+        @Field("estimated_cost")
+        private Double estimatedCost;
+
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Location {
+        @Field("latitude")
+        private Double latitude;
+        @Field("longitude")
+        private Double longitude;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Meals {
+        @Field("name")
+        private String name;
+        @Field("price")
+        private Double price;
+        @Field("address")
+        private String address;
+        @Field("location")
+        private Location location;
+        @Field("description")
+        private String description;
+        @Field("estimated_cost")
+        private Double estimatedCost;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Attractions {
+        @Field("name")
+        private String name;
+        @Field("ticket_price")
+        private Double ticketPrice;
+        @Field("address")
+        private String address;
+        @Field("location")
+        private Location location;
+        @Field("description")
+        private String description;
+        @Field("visit_duration")
+        private Integer visitDuration;
+        @Field("category")
+        private String category;
+        @Field("rating")
+        private String rating;
+        @Field("poi_id")
+        private String poiId;
+        @Field("image_url")
+        private String imageUrl;
+        @Field("photos")
+        private List<String> photos;
+
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class WeatherInfo {
+        @Field("date")
+        private String date;
+        @Field("day_weather")
+        private String dayWeather;
+        @Field("night_weather")
+        private String nightWeather;
+        @Field("day_temp")
+        private String dayTemp;
+        @Field("night_temp")
+        private String nightTemp;
+        @Field("wind_direction")
+        private String windDirection;
+        @Field("wind_power")
+        private String windPower;
     }
 }

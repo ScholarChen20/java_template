@@ -29,7 +29,7 @@ public class GrabTicketDTO {
      * 座位ID列表（用户选择的座位）
      */
     @NotEmpty(message = "座位列表不能为空")
-    @Size(min = 1, max = 4, message = "每次最多选择4个座位")
+    @Size(min = 1, max = 10, message = "每次最多选择10个座位")
     private List<Long> seatIds;
 
     /**
@@ -43,21 +43,31 @@ public class GrabTicketDTO {
     private Integer seatCount;
 
     /**
-     * 联系人姓名
+     * 联系人列表
      */
-    @NotNull(message = "联系人姓名不能为空")
-    @Size(min = 2, max = 50, message = "联系人姓名长度为2-50个字符")
-    private String contactName;
+    @NotEmpty(message = "联系人列表不能为空")
+    private List<TicketUser> ticketUsers;
 
-    /**
-     * 联系人手机
-     */
-    @NotNull(message = "联系人手机不能为空")
-    private String contactPhone;
-
-    /**
-     * 联系人身份证
-     */
-    @NotNull(message = "联系人身份证不能为空")
-    private String contactIdCard;
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TicketUser{
+        /**
+         * 买票人真实姓名
+         */
+        @NotNull(message = "联系人姓名不能为空")
+        @Size(min = 2, max = 50, message = "联系人姓名长度为2-50个字符")
+        private String contactName;
+        /**
+         * 买票人手机号
+         */
+        @NotNull(message = "联系人手机不能为空")
+        private String contactPhone;
+        /**
+         * 买票人身份证
+         */
+        @NotNull(message = "联系人身份证不能为空")
+        private String contactIdCard;
+    }
 }

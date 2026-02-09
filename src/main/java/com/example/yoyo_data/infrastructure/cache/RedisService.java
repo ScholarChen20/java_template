@@ -665,4 +665,5 @@ public interface RedisService {
     Long streamLen(String streamKey);
 
 
+    boolean setIfAbsent(String lockKey, String number, long grabLockExpire);
 }

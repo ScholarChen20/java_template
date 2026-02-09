@@ -60,6 +60,24 @@ public class OrderSeat implements Serializable {
     private BigDecimal price;
 
     /**
+     * 观影人姓名
+     */
+    @TableField("viewer_name")
+    private String viewerName;
+
+    /**
+     * 观影人手机
+     */
+    @TableField("viewer_phone")
+    private String viewerPhone;
+
+    /**
+     * 观影人身份证
+     */
+    @TableField("viewer_id_card")
+    private String viewerIdCard;
+
+    /**
      * 创建时间
      */
     @TableField("created_at")
