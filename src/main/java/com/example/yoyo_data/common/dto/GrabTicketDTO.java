@@ -63,11 +63,13 @@ public class GrabTicketDTO {
          * 买票人手机号
          */
         @NotNull(message = "联系人手机不能为空")
+        @Size(min = 11, max = 11, message = "联系人手机号长度为11位")
         private String contactPhone;
         /**
          * 买票人身份证
          */
         @NotNull(message = "联系人身份证不能为空")
+        @Size(min = 18, max = 18, message = "联系人身份证长度为18位")
         private String contactIdCard;
     }
 }

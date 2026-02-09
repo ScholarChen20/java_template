@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.constant.*;
 import com.example.yoyo_data.common.dto.GrabTicketDTO;
+import com.example.yoyo_data.common.dto.OrderCreateEvent;
 import com.example.yoyo_data.common.dto.PayOrderDTO;
 import com.example.yoyo_data.common.entity.*;
 import com.example.yoyo_data.common.vo.SeatVO;
@@ -35,6 +36,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.example.yoyo_data.common.constant.ShowEventStatus.*;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.FIVE_MINUTES;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.ONE_HOUR;
 
 /**
  * 抢票服务 Redisson 增强实现
@@ -153,9 +156,7 @@ public class TicketServiceRedissonImpl implements TicketService {
         long lockStartTime = System.currentTimeMillis();
 
         try {
-            // 尝试获取锁：等待时间 3 秒，锁自动释放时间 30 秒
-            // Watchdog 会每 10 秒检查一次，如果业务还在执行，自动续期 30 秒
-            // 这样即使业务执行时间超过 30 秒，也不会出现锁过期问题
+            // 尝试获取锁：等待时间 3 秒，锁自动释放时间 30 秒 Watchdog 会每 10 秒检查一次，如果业务还在执行，自动续期 30 秒
             boolean locked = lock.tryLock(3, 30, TimeUnit.SECONDS);
 
             if (!locked) {
@@ -168,23 +169,33 @@ public class TicketServiceRedissonImpl implements TicketService {
                     userId, dto.getShowEventId(), lockAcquiredTime);
 
             // ========== 第四步第五步：座位校验和限购校验 =========
+            String tempKey = TicketRedisKey.TMP_SEATS_PREFIX +  UUID.randomUUID().toString().substring(0, 16);
+            List<String> seatStr = dto.getSeatIds().stream()
+                    .map(seatId -> seatMapper.selectById(seatId))
+                    .map(seat -> seat.getSeatZone() + "," + seat.getSeatRow() + "," + seat.getSeatNumber())
+                            .collect(Collectors.toList());
+            log.info("【座位信息汇总】userId={}, showEventId={}, seatCount={}, seatStr={}",
+                    userId, dto.getShowEventId(), seatStr.size(), seatStr);
+            redisService.pipelineSet(tempKey, seatStr, FIVE_MINUTES);
 
+            // 执行 Lua 脚本
             long execute = stringRedisTemplate.execute(
                     SECKILL_SCRIPT,
                     Collections.emptyList(),
                     dto.getShowEventId().toString(),
-                    new ArrayList<>(),
-                    userId.toString()
+                    userId.toString(),
+                    String.valueOf(redisIdWorker.nextId(TicketRedisKey.TICKET_ORDER_PREFIX)),
+                    tempKey
             );
+            log.info("【抢票结果】execute={}", execute);
             if(execute != 0){
-                return Result.error(execute == 1 ? REPEAT_ORDER : SEAT_LOCKED_OR_SOLD);
+                return Result.error(execute == 1 ? SEAT_LOCKED_OR_SOLD : REPEAT_ORDER);
             }
-
 
             // ========== 第六步：创建订单 ==========
             LocalDateTime now = LocalDateTime.now();
-            String orderNo = String.valueOf(redisIdWorker.nextId("ticket_order"));
-            List<Seat> seats = seatMapper.selectBatchIds(dto.getSeatIds());
+            List<Seat> seats = new ArrayList<>();
+            String orderNo = String.valueOf(redisIdWorker.nextId(TicketRedisKey.TICKET_ORDER_PREFIX));
             BigDecimal totalAmount = seats.stream()
                     .map(Seat::getPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -210,92 +221,22 @@ public class TicketServiceRedissonImpl implements TicketService {
             log.info("【订单创建】orderNo={}, orderId={}, totalAmount={}",
                     orderNo, order.getId(), totalAmount);
 
-            // ========== 第七步：CAS 锁定座位 ==========
-            LocalDateTime lockExpireTime = now.plusMinutes(15);
-            int lockedSeatCount = 0;
-
-            for (Seat seat : seats) {
-                int lockResult = seatMapper.lockSeatWithCAS(
-                        seat.getId(),
-                        userId,
-                        order.getId(),
-                        lockExpireTime,
-                        seat.getVersion()
-                );
-
-                if (lockResult == 0) {
-                    // CAS 失败，座位已被其他用户抢走
-                    log.error("【CAS失败】座位被抢: seatCode={}, seatId={}, version={}",
-                            seat.getSeatCode(), seat.getId(), seat.getVersion());
-                    throw new RuntimeException("座位已被其他用户抢走: " + seat.getSeatCode());
-                }
-
-                lockedSeatCount++;
-            }
-
-            log.info("【座位锁定】orderId={}, 锁定座位数={}/{}",
-                    order.getId(), lockedSeatCount, seats.size());
-
-            // ========== 第八步：更新演出活动座位数 ==========
+            // ========== 第七步：构建订单创建事件并发送到 Kafka（异步处理） ==========
             ShowEvent showEvent = showEventMapper.selectById(dto.getShowEventId());
-            int updateResult = showEventMapper.lockSeats(
-                    dto.getShowEventId(),
-                    seats.size(),
-                    showEvent.getVersion()
-            );
+            OrderCreateEvent orderCreateEvent = buildOrderCreateEvent(order, seats, dto, showEvent);
+            sendOrderCreateEvent(orderCreateEvent);
+            log.info("【订单创建事件已发送】orderId={}, orderNo={}", order.getId(), orderNo);
 
-            if (updateResult == 0) {
-                // 乐观锁失败，演出座位数已被其他事务修改
-                log.error("【乐观锁失败】演出座位数更新失败: showEventId={}, version={}",
-                        dto.getShowEventId(), showEvent.getVersion());
-                throw new RuntimeException("演出座位库存更新失败，请重试");
-            }
+            // ========== 第八步：将订单加入延迟队列（15分钟后检查是否支付） ==========
+            addOrderToDelayQueue(order.getId(), order.getExpireTime());
+            log.info("【订单加入延迟队列】orderId={}, expireTime={}", order.getId(), order.getExpireTime());
 
-            log.info("【演出更新】showEventId={}, 可售座位-{}, 锁定座位+{}",
-                    dto.getShowEventId(), seats.size(), seats.size());
-
-            // ========== 第九步：创建订单座位关联（绑定观影人） ==========
-            List<OrderSeat> orderSeats = new ArrayList<>();
-            for (int i = 0; i < seats.size(); i++) {
-                Seat seat = seats.get(i);
-                GrabTicketDTO.TicketUser ticketUser = dto.getTicketUsers().get(i);
-
-                OrderSeat orderSeat = OrderSeat.builder()
-                        .orderId(order.getId())
-                        .seatId(seat.getId())
-                        .showEventId(dto.getShowEventId())
-                        .seatCode(seat.getSeatCode())
-                        .price(seat.getPrice())
-                        .viewerName(ticketUser.getContactName())
-                        .viewerPhone(ticketUser.getContactPhone())
-                        .viewerIdCard(ticketUser.getContactIdCard())
-                        .build();
-
-                orderSeats.add(orderSeat);
-            }
-
-            orderSeats.forEach(orderSeatMapper::insert);
-            log.info("【订单座位关联】orderId={}, 关联座位数={}, 已绑定观影人信息",
-                    order.getId(), orderSeats.size());
-
-            // ========== 第十步：更新用户购票记录 ==========
-            updateUserTicketRecord(userId, dto.getShowEventId(), seats.size());
-            log.info("【购票记录】userId={}, showEventId={}, 购票数+{}",
-                    userId, dto.getShowEventId(), seats.size());
-
-            // ========== 第十一步：清除缓存 ==========
-            clearShowEventCache(dto.getShowEventId());
-
-            // ========== 第十二步：发送 Kafka 消息 ==========
-            sendGrabTicketEvent(order, seats);
-
-            // ========== 第十三步：构建返回结果 ==========
+            // ========== 第九步：构建返回结果（快速响应） ==========
             TicketOrderVO vo = buildOrderVO(order, showEvent, seats);
 
             long totalTime = System.currentTimeMillis() - lockStartTime;
-            log.info("【抢票成功】userId={}, orderId={}, orderNo={}, seatCount={}, 总耗时={}ms, 锁持有时间={}ms",
-                    userId, order.getId(), orderNo, seats.size(), totalTime,
-                    totalTime - lockAcquiredTime);
+            log.info("【抢票成功-快速响应】userId={}, orderId={}, orderNo={}, seatCount={}, 总耗时={}ms（后续业务异步处理）",
+                    userId, order.getId(), orderNo, seats.size(), totalTime);
 
             return Result.success(vo);
 
@@ -555,8 +496,18 @@ public class TicketServiceRedissonImpl implements TicketService {
         Long userId = jwtUtils.getUserIdFromToken(token);
 
         try {
+            // 缓存中取
+            String cacheKey = TicketRedisKey.ORDER_PREFIX + userId + ":" + orderId;
+            TicketOrderVO orderVo = JSON.parseObject(redisService.stringGetString(cacheKey), TicketOrderVO.class);
+            if (orderVo != null) {
+                log.info("【查询成功】userId={}, orderId={}", userId, orderId);
+                return Result.success(orderVo);
+            }
+
             // 查询订单
-            TicketOrder order = ticketOrderMapper.selectById(orderId);
+            LambdaQueryWrapper<TicketOrder> orderWrapper = new LambdaQueryWrapper<>();
+            orderWrapper.eq(TicketOrder::getOrderNo, orderId);
+            TicketOrder order = ticketOrderMapper.selectOne(orderWrapper);
             if (order == null) {
                 log.warn("【查询失败】订单不存在: orderId={}", orderId);
                 return Result.error("订单不存在");
@@ -573,18 +524,19 @@ public class TicketServiceRedissonImpl implements TicketService {
             ShowEvent showEvent = showEventMapper.selectById(order.getShowEventId());
 
             // 查询订单座位
-            LambdaQueryWrapper<OrderSeat> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(OrderSeat::getOrderId, orderId);
-            List<OrderSeat> orderSeats = orderSeatMapper.selectList(queryWrapper);
+            LambdaQueryWrapper<OrderSeat> orderSeatQuery = new LambdaQueryWrapper<>();
+            orderSeatQuery.eq(OrderSeat::getOrderId, orderId);
+            List<OrderSeat> orderSeats = orderSeatMapper.selectList(orderSeatQuery);
             List<Seat> seats = orderSeats.stream()
                     .map(os -> seatMapper.selectById(os.getSeatId()))
                     .collect(Collectors.toList());
 
             // 构建返回结果
             TicketOrderVO vo = buildOrderVO(order, showEvent, seats);
-
             log.debug("【查询订单】userId={}, orderId={}, status={}", userId, orderId, order.getStatus());
 
+            // 写入redis
+            redisService.stringSetString(cacheKey ,JSON.toJSONString(vo), ONE_HOUR);
             return Result.success(vo);
 
         } catch (Exception e) {
@@ -893,5 +845,107 @@ public class TicketServiceRedissonImpl implements TicketService {
             return Result.error(SEAT_NUM_NOT_EQUAL_TO_VIEWER_NUM);
         }
         return Result.success();
+    }
+
+    /**
+     * 构建订单创建事件
+     *
+     * @param order 订单实体
+     * @param seats 座位列表
+     * @param dto 抢票请求DTO
+     * @param showEvent 演出活动实体
+     * @return 订单创建事件
+     */
+    private OrderCreateEvent buildOrderCreateEvent(TicketOrder order, List<Seat> seats,
+                                                    GrabTicketDTO dto, ShowEvent showEvent) {
+        // 转换座位信息
+        List<OrderCreateEvent.SeatInfo> seatInfos = seats.stream()
+                .map(seat -> OrderCreateEvent.SeatInfo.builder()
+                        .seatId(seat.getId())
+                        .seatCode(seat.getSeatCode())
+                        .price(seat.getPrice())
+                        .version(seat.getVersion())
+                        .build())
+                .collect(Collectors.toList());
+
+        // 转换观影人信息
+        List<OrderCreateEvent.TicketUserInfo> ticketUserInfos = dto.getTicketUsers().stream()
+                .map(user -> OrderCreateEvent.TicketUserInfo.builder()
+                        .contactName(user.getContactName())
+                        .contactPhone(user.getContactPhone())
+                        .contactIdCard(user.getContactIdCard())
+                        .build())
+                .collect(Collectors.toList());
+
+        return OrderCreateEvent.builder()
+                .orderId(order.getId())
+                .orderNo(order.getOrderNo())
+                .showEventId(order.getShowEventId())
+                .userId(order.getUserId())
+                .seatCount(order.getSeatCount())
+                .totalAmount(order.getTotalAmount())
+                .expireTime(order.getExpireTime())
+                .contactName(order.getContactName())
+                .contactPhone(order.getContactPhone())
+                .contactIdCard(order.getContactIdCard())
+                .seatIds(dto.getSeatIds())
+                .ticketUsers(ticketUserInfos)
+                .seats(seatInfos)
+                .showEventVersion(showEvent.getVersion())
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    /**
+     * 发送订单创建事件到 Kafka
+     *
+     * @param orderCreateEvent 订单创建事件
+     */
+    private void sendOrderCreateEvent(OrderCreateEvent orderCreateEvent) {
+        try {
+            MessageEvent event = MessageEvent.builder()
+                    .eventType(KafkaTopic.ORDER_CREATE)
+                    .source("TicketServiceRedisson")
+                    .userId(orderCreateEvent.getUserId())
+                    .data(JSON.toJSONString(orderCreateEvent))
+                    .timestamp(LocalDateTime.now())
+                    .createdAt(LocalDateTime.now())
+                    .priority(10) // 最高优先级，快速处理
+                    .build();
+
+            kafkaProducerTemplate.sendEvent(KafkaTopic.ORDER_CREATE, event);
+            log.info("【订单创建事件发送成功】orderId={}, orderNo={}",
+                    orderCreateEvent.getOrderId(), orderCreateEvent.getOrderNo());
+
+        } catch (Exception e) {
+            log.error("【订单创建事件发送失败】orderId={}, orderNo={}, error={}",
+                    orderCreateEvent.getOrderId(), orderCreateEvent.getOrderNo(), e.getMessage(), e);
+            // 注意：发送失败需要人工处理或重试机制
+        }
+    }
+
+    /**
+     * 将订单加入延迟队列（Redis ZSet实现）
+     * 用于监控15分钟后订单是否已支付
+     *
+     * @param orderId 订单ID
+     * @param expireTime 过期时间
+     */
+    private void addOrderToDelayQueue(Long orderId, LocalDateTime expireTime) {
+        try {
+            String delayQueueKey = TicketRedisKey.ORDER_DELAY_QUEUE;
+            // 将过期时间转换为时间戳（秒）作为score
+            long expireTimestamp = expireTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+
+            // 使用 ZSet 存储：score为过期时间戳，value为订单ID
+            stringRedisTemplate.opsForZSet().add(delayQueueKey, orderId.toString(), expireTimestamp);
+
+            log.debug("【订单加入延迟队列】orderId={}, expireTime={}, timestamp={}",
+                    orderId, expireTime, expireTimestamp);
+
+        } catch (Exception e) {
+            log.error("【订单加入延迟队列失败】orderId={}, error={}", orderId, e.getMessage(), e);
+            // 延迟队列添加失败不影响主流程
+        }
     }
 }

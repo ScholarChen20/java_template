@@ -666,4 +666,23 @@ public class RedisServiceImpl implements RedisService {
     public boolean setIfAbsent(String lockKey, String number, long grabLockExpire) {
         return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(lockKey, number, grabLockExpire, TimeUnit.MILLISECONDS));
     }
+
+    @Override
+    public void pipelineSet(String tempKey, List<String> seatStr, long expireTime) {
+        // 批量将座位信息保存到临时缓存中
+        // ★★★ 修复：使用 stringRedisTemplate 而不是 redisTemplate ★★★
+        if (seatStr != null && !seatStr.isEmpty()){
+            for (String seat : seatStr){
+                stringRedisTemplate.opsForList().rightPush(tempKey, seat);
+            }
+        }
+        stringRedisTemplate.expire(tempKey, expireTime, TimeUnit.SECONDS);
+
+        log.debug("【Redis写入】tempKey={}, seatCount={}, expireTime={}秒", tempKey, seatStr.size(), expireTime);
+    }
+
+    @Override
+    public Boolean exists(String reminderKey) {
+        return redisTemplate.hasKey(reminderKey);
+    }
 }
