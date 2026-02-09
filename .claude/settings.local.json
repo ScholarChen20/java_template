@@ -15,7 +15,9 @@
       "Bash(do sed -i 's/import com\\\\.example\\\\.yoyo_data\\\\.mapper\\\\./import com.example.yoyo_data.infrastructure.repository./g' \"$file\")",
       "Bash(for file in *.java)",
       "Bash(do sed -i 's/package com\\\\.example\\\\.yoyo_data\\\\.mapper;/package com.example.yoyo_data.infrastructure.repository;/g' \"$file\")",
-      "Bash(do mv \"$file\" \"../infrastructure/repository/$file\")"
+      "Bash(do mv \"$file\" \"../infrastructure/repository/$file\")",
+      "Bash(mvn compile:*)",
+      "Bash(mvn clean compile:*)"
     ]
   }
 }

@@ -21,17 +21,20 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.example.yoyo_data.common.constant.ShowEventStatus.*;
 
 /**
  * 抢票服务 Redisson 增强实现
@@ -85,6 +88,22 @@ public class TicketServiceRedissonImpl implements TicketService {
     @Autowired
     private KafkaProducerTemplate kafkaProducerTemplate;
 
+    @Autowired
+    private com.example.yoyo_data.util.RedisIdWorker redisIdWorker;
+
+    /**
+     * Lua 脚本，加载脚本内容
+     */
+    private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+    static{
+        SECKILL_SCRIPT = new DefaultRedisScript<>();
+        SECKILL_SCRIPT.setLocation(new ClassPathResource("lua_scripts/seckill.lua"));
+        SECKILL_SCRIPT.setResultType(Long.class);
+    }
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
     /**
      * 抢票 - 核心接口（Redisson 增强版）
      *
@@ -121,29 +140,10 @@ public class TicketServiceRedissonImpl implements TicketService {
         log.info("【抢票请求】用户={}, 演出={}, 座位数={}", userId, dto.getShowEventId(), dto.getSeatIds().size());
 
         // ========== 第二步：演出活动校验 ==========
-        ShowEvent showEvent = showEventMapper.selectById(dto.getShowEventId());
-        if (showEvent == null) {
-            log.warn("【抢票失败】演出不存在: showEventId={}", dto.getShowEventId());
-            return Result.error("演出活动不存在");
-        }
-
-        // 检查演出状态
-        if (!ShowEventStatus.SELLING.equals(showEvent.getStatus())) {
-            log.warn("【抢票失败】演出状态异常: status={}, showEventId={}", showEvent.getStatus(), dto.getShowEventId());
-            return Result.error("演出未开始售票或已结束");
-        }
-
-        // 检查售票时间
-        LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(showEvent.getSaleStartTime())) {
-            log.warn("【抢票失败】售票未开始: saleStartTime={}, showEventId={}",
-                    showEvent.getSaleStartTime(), dto.getShowEventId());
-            return Result.error("演出尚未开始售票");
-        }
-        if (now.isAfter(showEvent.getSaleEndTime())) {
-            log.warn("【抢票失败】售票已结束: saleEndTime={}, showEventId={}",
-                    showEvent.getSaleEndTime(), dto.getShowEventId());
-            return Result.error("演出已结束售票");
+        Result<?> eventStatus = checkShowEventStatus(dto.getShowEventId(), dto.getSeatIds().size(), dto.getTicketUsers().size(), userId);
+        if (eventStatus.getCode() == 500) {
+            log.warn("【抢票失败】演出活动状态异常: {}", eventStatus.getMessage());
+            return Result.error(eventStatus.getMessage());
         }
 
         // ========== 第三步：获取 Redisson 分布式锁 ==========
@@ -159,55 +159,40 @@ public class TicketServiceRedissonImpl implements TicketService {
             boolean locked = lock.tryLock(3, 30, TimeUnit.SECONDS);
 
             if (!locked) {
-                log.warn("【抢票失败】获取锁超时: userId={}, showEventId={}, 等待时间=3秒",
-                        userId, dto.getShowEventId());
-                return Result.error("请勿重复提交抢票请求，请稍后再试");
+                log.warn("【抢票失败】获取锁超时: userId={}, showEventId={}, 等待时间=3秒", userId, dto.getShowEventId());
+                return Result.error(REPEAT_REQUEST);
             }
 
             long lockAcquiredTime = System.currentTimeMillis() - lockStartTime;
             log.info("【锁获取成功】userId={}, showEventId={}, 等待时间={}ms",
                     userId, dto.getShowEventId(), lockAcquiredTime);
 
-            // ========== 第四步：限购检查 ==========
-            boolean limitCheckResult = checkUserPurchaseLimit(
-                    userId,
-                    dto.getShowEventId(),
-                    dto.getSeatIds().size(),
-                    showEvent.getMaxBuyLimit()
+            // ========== 第四步第五步：座位校验和限购校验 =========
+
+            long execute = stringRedisTemplate.execute(
+                    SECKILL_SCRIPT,
+                    Collections.emptyList(),
+                    dto.getShowEventId().toString(),
+                    new ArrayList<>(),
+                    userId.toString()
             );
-            if (!limitCheckResult) {
-                log.warn("【抢票失败】超过限购: userId={}, requestCount={}, maxLimit={}",
-                        userId, dto.getSeatIds().size(), showEvent.getMaxBuyLimit());
-                return Result.error("【抢票失败】超过限购: 不能超过：" + showEvent.getMaxBuyLimit() + "张");
+            if(execute != 0){
+                return Result.error(execute == 1 ? REPEAT_ORDER : SEAT_LOCKED_OR_SOLD);
             }
 
-            // ========== 第五步：座位验证 ==========
-            List<Seat> seats = new ArrayList<>();
-            for (Long seatId : dto.getSeatIds()) {
-                Seat seat = seatMapper.selectById(seatId);
-                if (seat == null) {
-                    log.warn("【抢票失败】座位不存在: seatId={}", seatId);
-                    return Result.error("座位不存在: " + seatId);
-                }
-                if (!seat.getShowEventId().equals(dto.getShowEventId())) {
-                    log.warn("【抢票失败】座位不属于该演出: seatId={}, showEventId={}",
-                            seatId, dto.getShowEventId());
-                    return Result.error("座位不属于该演出");
-                }
-                if (!SeatStatus.AVAILABLE.equals(seat.getStatus())) {
-                    log.warn("【抢票失败】座位已被占用: seatCode={}, status={}",
-                            seat.getSeatCode(), seat.getStatus());
-                    return Result.error("座位已被锁定或售出: " + seat.getSeatCode());
-                }
-                seats.add(seat);
-            }
 
             // ========== 第六步：创建订单 ==========
-            String orderNo = generateOrderNo(userId);
+            LocalDateTime now = LocalDateTime.now();
+            String orderNo = String.valueOf(redisIdWorker.nextId("ticket_order"));
+            List<Seat> seats = seatMapper.selectBatchIds(dto.getSeatIds());
             BigDecimal totalAmount = seats.stream()
                     .map(Seat::getPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+            // 使用第一个观影人作为主联系人
+            GrabTicketDTO.TicketUser primaryContact = dto.getTicketUsers().get(0);
+
+            // 创建订单
             TicketOrder order = TicketOrder.builder()
                     .orderNo(orderNo)
                     .showEventId(dto.getShowEventId())
@@ -216,9 +201,9 @@ public class TicketServiceRedissonImpl implements TicketService {
                     .totalAmount(totalAmount)
                     .status(OrderStatus.PENDING)
                     .expireTime(now.plusMinutes(15)) // 15分钟过期
-                    .contactName(dto.getContactName())
-                    .contactPhone(dto.getContactPhone())
-                    .contactIdCard(dto.getContactIdCard())
+                    .contactName(primaryContact.getContactName())
+                    .contactPhone(primaryContact.getContactPhone())
+                    .contactIdCard(primaryContact.getContactIdCard())
                     .build();
 
             ticketOrderMapper.insert(order);
@@ -252,6 +237,7 @@ public class TicketServiceRedissonImpl implements TicketService {
                     order.getId(), lockedSeatCount, seats.size());
 
             // ========== 第八步：更新演出活动座位数 ==========
+            ShowEvent showEvent = showEventMapper.selectById(dto.getShowEventId());
             int updateResult = showEventMapper.lockSeats(
                     dto.getShowEventId(),
                     seats.size(),
@@ -268,18 +254,29 @@ public class TicketServiceRedissonImpl implements TicketService {
             log.info("【演出更新】showEventId={}, 可售座位-{}, 锁定座位+{}",
                     dto.getShowEventId(), seats.size(), seats.size());
 
-            // ========== 第九步：创建订单座位关联 ==========
-            List<OrderSeat> orderSeats = seats.stream().map(seat -> OrderSeat.builder()
-                    .orderId(order.getId())
-                    .seatId(seat.getId())
-                    .showEventId(dto.getShowEventId())
-                    .seatCode(seat.getSeatCode())
-                    .price(seat.getPrice())
-                    .build()
-            ).collect(Collectors.toList());
+            // ========== 第九步：创建订单座位关联（绑定观影人） ==========
+            List<OrderSeat> orderSeats = new ArrayList<>();
+            for (int i = 0; i < seats.size(); i++) {
+                Seat seat = seats.get(i);
+                GrabTicketDTO.TicketUser ticketUser = dto.getTicketUsers().get(i);
+
+                OrderSeat orderSeat = OrderSeat.builder()
+                        .orderId(order.getId())
+                        .seatId(seat.getId())
+                        .showEventId(dto.getShowEventId())
+                        .seatCode(seat.getSeatCode())
+                        .price(seat.getPrice())
+                        .viewerName(ticketUser.getContactName())
+                        .viewerPhone(ticketUser.getContactPhone())
+                        .viewerIdCard(ticketUser.getContactIdCard())
+                        .build();
+
+                orderSeats.add(orderSeat);
+            }
 
             orderSeats.forEach(orderSeatMapper::insert);
-            log.info("【订单座位关联】orderId={}, 关联座位数={}", order.getId(), orderSeats.size());
+            log.info("【订单座位关联】orderId={}, 关联座位数={}, 已绑定观影人信息",
+                    order.getId(), orderSeats.size());
 
             // ========== 第十步：更新用户购票记录 ==========
             updateUserTicketRecord(userId, dto.getShowEventId(), seats.size());
@@ -658,9 +655,6 @@ public class TicketServiceRedissonImpl implements TicketService {
         }
     }
 
-    // ========================================
-    // 私有辅助方法
-    // ========================================
 
     /**
      * 检查用户限购
@@ -720,17 +714,6 @@ public class TicketServiceRedissonImpl implements TicketService {
             log.debug("【更新购票记录】userId={}, showEventId={}, ticketCount+{}",
                     userId, showEventId, ticketCount);
         }
-    }
-
-    /**
-     * 生成订单编号
-     * 规则：TK + 时间戳（13位）+ 用户ID后6位
-     *
-     * @param userId 用户ID
-     * @return 订单编号
-     */
-    private String generateOrderNo(Long userId) {
-        return "TK" + System.currentTimeMillis() + String.format("%06d", userId % 1000000);
     }
 
     /**
@@ -878,5 +861,37 @@ public class TicketServiceRedissonImpl implements TicketService {
         } catch (Exception e) {
             log.warn("【Kafka发送失败】orderNo={}, error={}", order.getOrderNo(), e.getMessage());
         }
+    }
+
+    private Result<?> checkShowEventStatus(long eventId, int seatSize, int userSize, long userId){
+        ShowEvent showEvent = showEventMapper.selectById(eventId);
+        if (showEvent == null) {
+            log.warn("【抢票失败】演出不存在: showEventId={}", eventId);
+            return Result.error(NOT_EXIST);
+        }
+
+        // 检查演出状态
+        if (!ShowEventStatus.SELLING.equals(showEvent.getStatus())) {
+            log.warn("【抢票失败】演出状态异常: status={}, showEventId={}", showEvent.getStatus(), eventId);
+            return Result.error(NOT_START);
+        }
+
+        // 检查售票时间
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(showEvent.getSaleStartTime())) {
+            log.warn("【抢票失败】售票未开始: saleStartTime={}, showEventId={}", showEvent.getSaleStartTime(), eventId);
+            return Result.error(NOT_SELLING);
+        }
+        if (now.isAfter(showEvent.getSaleEndTime())) {
+            log.warn("【抢票失败】售票已结束: saleEndTime={}, showEventId={}", showEvent.getSaleEndTime(), eventId);
+            return Result.error(SELLING_END);
+        }
+
+        // 验证座位数量与观影人数量一致
+        if (seatSize != userSize) {
+            log.warn("【抢票失败】座位数量与观影人数量不一致: seatCount={}, userCount={}, userId={}", seatSize, userSize, userId);
+            return Result.error(SEAT_NUM_NOT_EQUAL_TO_VIEWER_NUM);
+        }
+        return Result.success();
     }
 }
