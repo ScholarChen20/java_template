@@ -112,3 +112,32 @@ CREATE TABLE tb_user_ticket_record (
 
 -- 表创建完成
 SELECT '✅ 数据库表创建完成！' AS message;
+
+-- ========================================
+-- 演唱会抢票系统 - 数据库表结构升级
+-- 修复多观影人功能支持
+-- Author: YoYo Data Team
+-- Date: 2026-02-09
+-- ========================================
+
+USE travel_agent;
+
+-- ========================================
+-- 1. 修改订单座位关联表，增加观影人信息
+-- ========================================
+ALTER TABLE tb_order_seat
+    ADD COLUMN viewer_name VARCHAR(100) COMMENT '观影人姓名' AFTER price,
+    ADD COLUMN viewer_phone VARCHAR(20) COMMENT '观影人手机' AFTER viewer_name,
+    ADD COLUMN viewer_id_card VARCHAR(20) COMMENT '观影人身份证' AFTER viewer_phone;
+
+-- ========================================
+-- 2. 为观影人信息字段添加索引（用于实名制检票查询）
+-- ========================================
+ALTER TABLE tb_order_seat
+    ADD INDEX idx_viewer_id_card (viewer_id_card);
+
+-- ========================================
+-- 表结构升级完成
+-- ========================================
+SELECT '✅ 数据库表结构升级完成！' AS message;
+SELECT '✅ tb_order_seat 表已增加观影人信息字段' AS detail;

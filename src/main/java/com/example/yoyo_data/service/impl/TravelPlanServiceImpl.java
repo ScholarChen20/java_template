@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 旅行计划服务实现类
+ * 旅行计划服务实现类 - 字段严格对齐 TravelPlan 实体
  */
 @Slf4j
 @Service
@@ -128,10 +128,13 @@ public class TravelPlanServiceImpl implements TravelPlanService {
                     .userId(userId)
                     .title(title)
                     .description(description)
-                    .destination(destination)
+                    .city(destination)  // destination 参数对应 city 字段
                     .startDate(startDate)
                     .endDate(endDate)
-                    .days(calculateDays(startDate, endDate))
+                    .days(new ArrayList<>())  // 初始化为空列表，后续可通过其他接口添加每日行程
+                    .budget(null)  // 预算对象初始为空，后续可更新
+                    .weather_info(null)  // 天气信息初始为空
+                    .overallSuggestions(null)  // 总体建议初始为空
                     .status("active")
                     .createdAt(new Date())
                     .updatedAt(new Date())
@@ -174,13 +177,14 @@ public class TravelPlanServiceImpl implements TravelPlanService {
                 return Result.error("无权修改此旅行计划");
             }
 
-            // 更新计划
+            // 更新计划基本信息
             plan.setTitle(title);
             plan.setDescription(description);
-            plan.setDestination(destination);
+            plan.setCity(destination);  // destination 参数对应 city 字段
             plan.setStartDate(startDate);
             plan.setEndDate(endDate);
-            plan.setDays(calculateDays(startDate, endDate));
+            // days 是 List<Days> 类型，保持原有的每日行程列表不变
+            // budget、weather_info、overallSuggestions 等字段保持不变
             plan.setUpdatedAt(new Date());
 
             // 保存到MongoDB
@@ -237,43 +241,92 @@ public class TravelPlanServiceImpl implements TravelPlanService {
     }
 
     /**
-     * 将TravelPlan转换为DTO
+     * 将 TravelPlan 转换为 TravelPlanDTO（字段完全对齐）
      */
     private TravelPlanDTO convertToDTO(TravelPlan plan) {
-        List<TravelPlanDTO.DailyItineraryDTO> dailyItineraryDTOs = null;
-        if (plan.getDailyItinerary() != null) {
-            dailyItineraryDTOs = plan.getDailyItinerary().stream()
-                    .map(this::convertDailyItineraryToDTO)
-                    .collect(Collectors.toList());
-        }
-
         return TravelPlanDTO.builder()
                 .id(plan.getId())
                 .userId(plan.getUserId())
                 .title(plan.getTitle())
                 .description(plan.getDescription())
-                .destination(plan.getDestination())
+                .city(plan.getCity())  // city 字段直接对应
                 .startDate(plan.getStartDate())
                 .endDate(plan.getEndDate())
-                .days(plan.getDays())
-                .dailyItinerary(dailyItineraryDTOs)
-                .budget(plan.getBudget())
+                .days(convertDaysList(plan.getDays()))  // List<Days> -> List<DaysDTO>
+                .budget(convertBudget(plan.getBudget()))  // Budget -> BudgetDTO
+                .weatherInfo(convertWeatherInfoList(plan.getWeather_info()))  // List<WeatherInfo> -> List<WeatherInfoDTO>
+                .overallSuggestions(plan.getOverallSuggestions())
                 .status(plan.getStatus())
-                .metadata(plan.getMetadata())
                 .createdAt(plan.getCreatedAt())
                 .updatedAt(plan.getUpdatedAt())
                 .build();
     }
 
     /**
-     * 将DailyItinerary转换为DTO
+     * 转换每日行程列表
      */
-    private TravelPlanDTO.DailyItineraryDTO convertDailyItineraryToDTO(TravelPlan.DailyItinerary itinerary) {
-        return TravelPlanDTO.DailyItineraryDTO.builder()
-                .day(itinerary.getDay())
-                .date(itinerary.getDate())
-                .activities(itinerary.getActivities())
-                .metadata(itinerary.getMetadata())
+    private List<TravelPlanDTO.DaysDTO> convertDaysList(List<TravelPlan.Days> daysList) {
+        if (daysList == null || daysList.isEmpty()) {
+            return null;
+        }
+        return daysList.stream()
+                .map(this::convertDays)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 转换单个每日行程
+     */
+    private TravelPlanDTO.DaysDTO convertDays(TravelPlan.Days days) {
+        return TravelPlanDTO.DaysDTO.builder()
+                .date(days.getDate())
+                .dayIndex(days.getDayIndex())
+                .description(days.getDescription())
+                .transportation(days.getTransportation())
+                .accommodation(days.getAccommodation())
+                .build();
+    }
+
+    /**
+     * 转换预算对象
+     */
+    private TravelPlanDTO.BudgetDTO convertBudget(TravelPlan.Budget budget) {
+        if (budget == null) {
+            return null;
+        }
+        return TravelPlanDTO.BudgetDTO.builder()
+                .totalAttractions(budget.getTotalAttractions())
+                .totalHotels(budget.getTotalHotels())
+                .totalMeals(budget.getTotalMeals())
+                .totalTransportation(budget.getTotalTransportation())
+                .total(budget.getTotal())
+                .build();
+    }
+
+    /**
+     * 转换天气信息列表
+     */
+    private List<TravelPlanDTO.WeatherInfoDTO> convertWeatherInfoList(List<TravelPlan.WeatherInfo> weatherInfoList) {
+        if (weatherInfoList == null || weatherInfoList.isEmpty()) {
+            return null;
+        }
+        return weatherInfoList.stream()
+                .map(this::convertWeatherInfo)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 转换单个天气信息
+     */
+    private TravelPlanDTO.WeatherInfoDTO convertWeatherInfo(TravelPlan.WeatherInfo weatherInfo) {
+        return TravelPlanDTO.WeatherInfoDTO.builder()
+                .date(weatherInfo.getDate())
+                .dayWeather(weatherInfo.getDayWeather())
+                .nightWeather(weatherInfo.getNightWeather())
+                .dayTemp(weatherInfo.getDayTemp())
+                .nightTemp(weatherInfo.getNightTemp())
+                .windDirection(weatherInfo.getWindDirection())
+                .windPower(weatherInfo.getWindPower())
                 .build();
     }
 
@@ -292,21 +345,6 @@ public class TravelPlanServiceImpl implements TravelPlanService {
         Set<String> keys = redisService.keys(TRAVEL_PLAN_LIST_CACHE_PREFIX + userId + ":*");
         if (keys != null && !keys.isEmpty()) {
             redisService.delete(keys);
-        }
-    }
-
-    /**
-     * 计算两个日期之间的天数
-     */
-    private Integer calculateDays(String startDate, String endDate) {
-        try {
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd");
-            Date start = sdf.parse(startDate);
-            Date end = sdf.parse(endDate);
-            long diffTime = end.getTime() - start.getTime();
-            return (int) (diffTime / (1000 * 60 * 60 * 24)) + 1;
-        } catch (Exception e) {
-            return 1;
         }
     }
 

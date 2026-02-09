@@ -16,7 +16,7 @@ VALUES
 (1, '周杰伦2026世界巡回演唱会-北京站', 'CONCERT', 1, '国家体育场（鸟巢）',
  '2026-05-01 19:30:00', '2026-03-01 10:00:00', '2026-04-30 23:59:59',
  8000, 8000, 0, 0, 2,
- 'https://example.com/posters/jay_concert.jpg',
+ 'https://imgcache.dealmoon.com/thumbimg.dealmoon.com/dealmoon/b82/424/fd8/70b29f9f631225d536110cb.jpg_1280_1280_3_7005.jpg',
  '周杰伦2026世界巡回演唱会北京站，经典歌曲全新演绎，一场不容错过的音乐盛宴！',
  'PENDING'),
 
@@ -252,3 +252,5 @@ SELECT '✅ 演出活动数据初始化完成！' AS message;
 SELECT CONCAT('周杰伦演唱会座位数: ', COUNT(*)) AS seat_count FROM tb_seat WHERE show_event_id = 1;
 SELECT CONCAT('五月天演唱会座位数: ', COUNT(*)) AS seat_count FROM tb_seat WHERE show_event_id = 2;
 SELECT '提示：其他演出的座位数据可按需生成' AS notice;
+
+

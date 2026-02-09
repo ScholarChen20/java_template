@@ -120,6 +120,15 @@ public class CacheKeyManager {
      */
     public static final String POST_LIST_PREFIX = "post:list::";
 
+    /**
+     * 帖子详情缓存键前缀
+     */
+    public static final String POST_DETAIL_PREFIX = "post:detail:";
+
+    /**
+     * 帖子列表缓存键前缀
+     */
+    public static final String POST_LIST_PREFIX = "post:list:";
 
     /**
      * 缓存默认过期时间（秒） 默认1小时
@@ -162,6 +171,16 @@ public class CacheKeyManager {
          * 1天
          */
         public static final long ONE_DAY = 24 * 60 * 60;
+
+        /**
+         * 2天
+         */
+        public static final long TWO_DAYS = 2 * 24 * 60 * 60;
+
+        /**
+         * 3天
+         */
+        public static final long THREE_DAYS = 3 * 24 * 60 * 60;
 
         /**
          * 7天

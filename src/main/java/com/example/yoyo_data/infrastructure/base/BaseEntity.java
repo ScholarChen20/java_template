@@ -3,6 +3,7 @@ package com.example.yoyo_data.infrastructure.base;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -34,12 +35,14 @@ public class BaseEntity implements Serializable {
      * 创建时间 - 记录数据创建的时间
      */
     @TableField("created_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss" ,timezone = "GMT+8")
     private LocalDateTime createdAt;
 
     /**
      * 更新时间 - 记录数据最后更新的时间
      */
     @TableField("updated_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss" ,timezone = "GMT+8")
     private LocalDateTime updatedAt;
 
     /**

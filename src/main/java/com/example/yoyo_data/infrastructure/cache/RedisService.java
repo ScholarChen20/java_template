@@ -664,5 +664,27 @@ public interface RedisService {
      */
     Long streamLen(String streamKey);
 
+    /**
+     *  获取锁
+     * @param lockKey
+     * @param number
+     * @param grabLockExpire
+     * @return
+     */
 
+    boolean setIfAbsent(String lockKey, String number, long grabLockExpire);
+
+    /**
+     *  批量设置
+     * @param tempKey
+     * @param seatStr
+     */
+    void pipelineSet(String tempKey, List<String> seatStr, long expireTime);
+
+    /**
+     * 检测key是否存在
+     * @param reminderKey
+     * @return
+     */
+    Boolean exists(String reminderKey);
 }
