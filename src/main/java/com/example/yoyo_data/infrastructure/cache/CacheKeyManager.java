@@ -165,6 +165,16 @@ public class CacheKeyManager {
         public static final long ONE_DAY = 24 * 60 * 60;
 
         /**
+         * 2天
+         */
+        public static final long TWO_DAYS = 2 * 24 * 60 * 60;
+
+        /**
+         * 3天
+         */
+        public static final long THREE_DAYS = 3 * 24 * 60 * 60;
+
+        /**
          * 7天
          */
         public static final long SEVEN_DAYS = 7 * 24 * 60 * 60;

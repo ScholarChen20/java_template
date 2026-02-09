@@ -120,6 +120,23 @@ public class KafkaTopic {
      */
     public static final String ORDER_TIMEOUT = "order-timeout";
 
+    // ==================== 演出活动提醒相关主题 ====================
+
+    /**
+     * 演出活动开票前1天提醒主题
+     */
+    public static final String SHOW_REMIND_ONE_DAY = "show-remind-one-day";
+
+    /**
+     * 演出活动开票前1小时提醒主题
+     */
+    public static final String SHOW_REMIND_ONE_HOUR = "show-remind-one-hour";
+
+    /**
+     * 演出活动开票前5分钟提醒主题
+     */
+    public static final String SHOW_REMIND_FIVE_MINUTES = "show-remind-five-minutes";
+
     // ==================== 私有构造函数 ====================
 
     private KafkaTopic() {

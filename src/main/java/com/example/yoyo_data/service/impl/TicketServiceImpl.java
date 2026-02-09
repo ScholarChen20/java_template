@@ -93,6 +93,13 @@ public class TicketServiceImpl implements TicketService {
             return Result.error("演出已结束售票");
         }
 
+        // 验证座位数量与观影人数量一致
+        if (dto.getSeatIds().size() != dto.getTicketUsers().size()) {
+            log.warn("【抢票失败】座位数量与观影人数量不一致: seatCount={}, userCount={}, userId={}",
+                    dto.getSeatIds().size(), dto.getTicketUsers().size(), userId);
+            return Result.error("座位数量必须与观影人数量一致");
+        }
+
         // 3. 获取分布式锁（防止用户重复抢票）
         String lockKey = TicketRedisKey.GRAB_LOCK_PREFIX + userId + ":" + dto.getShowEventId();
         boolean locked = redisService.setIfAbsent(lockKey, "1", TicketRedisKey.GRAB_LOCK_EXPIRE);
@@ -130,6 +137,9 @@ public class TicketServiceImpl implements TicketService {
                     .map(Seat::getPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+            // 使用第一个观影人作为主联系人
+            GrabTicketDTO.TicketUser primaryContact = dto.getTicketUsers().get(0);
+
             TicketOrder order = TicketOrder.builder()
                     .orderNo(orderNo)
                     .showEventId(dto.getShowEventId())
@@ -138,9 +148,9 @@ public class TicketServiceImpl implements TicketService {
                     .totalAmount(totalAmount)
                     .status(OrderStatus.PENDING)
                     .expireTime(now.plusMinutes(15)) // 15分钟过期
-                    .contactName(dto.getContactName())
-                    .contactPhone(dto.getContactPhone())
-                    .contactIdCard(dto.getContactIdCard())
+                    .contactName(primaryContact.getContactName())
+                    .contactPhone(primaryContact.getContactPhone())
+                    .contactIdCard(primaryContact.getContactIdCard())
                     .build();
 
             ticketOrderMapper.insert(order);
@@ -171,15 +181,25 @@ public class TicketServiceImpl implements TicketService {
                 throw new RuntimeException("演出座位库存更新失败，请重试");
             }
 
-            // 9. 创建订单座位关联
-            List<OrderSeat> orderSeats = seats.stream().map(seat -> OrderSeat.builder()
-                    .orderId(order.getId())
-                    .seatId(seat.getId())
-                    .showEventId(dto.getShowEventId())
-                    .seatCode(seat.getSeatCode())
-                    .price(seat.getPrice())
-                    .build()
-            ).collect(Collectors.toList());
+            // 9. 创建订单座位关联（绑定观影人）
+            List<OrderSeat> orderSeats = new ArrayList<>();
+            for (int i = 0; i < seats.size(); i++) {
+                Seat seat = seats.get(i);
+                GrabTicketDTO.TicketUser ticketUser = dto.getTicketUsers().get(i);
+
+                OrderSeat orderSeat = OrderSeat.builder()
+                        .orderId(order.getId())
+                        .seatId(seat.getId())
+                        .showEventId(dto.getShowEventId())
+                        .seatCode(seat.getSeatCode())
+                        .price(seat.getPrice())
+                        .viewerName(ticketUser.getContactName())
+                        .viewerPhone(ticketUser.getContactPhone())
+                        .viewerIdCard(ticketUser.getContactIdCard())
+                        .build();
+
+                orderSeats.add(orderSeat);
+            }
             orderSeats.forEach(orderSeatMapper::insert);
 
             // 10. 更新用户购票记录

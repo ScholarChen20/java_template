@@ -25,17 +25,35 @@ local seats = {}
 for _, line in ipairs(seatLines) do
     local zone, row_str, col_str = line:match("([^,]+),([^,]+),([^,]+)")
     if not zone or not row_str or not col_str then
-        redis.call("DEL", tempKey)
-        return -1
-    end
-    local row, col = tonumber(row_str), tonumber(col_str)
-    if not row or not col then
+        redis.log(redis.LOG_WARNING, "Parse failed: line=[" .. tostring(line) .. "]")
         redis.call("DEL", tempKey)
         return -1
     end
 
-    -- 校验区域范围（略）
-    table.insert(seats, {zone=zone, row=row, col=col})
+    -- ★★★ 关键：trim 并转换 ★★★
+    local function trim(s)
+        return s and s:gsub("^%s*(.-)%s*$", "%1") or ""
+    end
+
+    zone = trim(zone)
+    row_str = trim(row_str)
+    col_str = trim(col_str)
+
+    local row = tonumber(row_str)
+    local col = tonumber(col_str)
+
+    if not row or not col then
+        redis.log(redis.LOG_WARNING, "Invalid number: zone=[" .. tostring(zone) .. "], row_str=[" .. tostring(row_str) .. "], col_str=[" .. tostring(col_str) .. "], row=" .. tostring(row) .. ", col=" .. tostring(col))
+        redis.call("DEL", tempKey)
+        return -1
+    end
+
+    -- ★★★ 修复：将解析后的座位加入 seats 表 ★★★
+    table.insert(seats, {
+        zone = zone,
+        row = row,
+        col = col
+    })
 end
 
 -- 4. 检查是否可售
