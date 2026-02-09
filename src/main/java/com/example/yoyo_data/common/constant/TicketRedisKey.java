@@ -56,6 +56,7 @@ public class TicketRedisKey {
      */
     public static final String TMP_SEATS_PREFIX = "tmp:seats:";
 
+
     /**
      * 座位库存过期时间（秒）：30分钟
      */

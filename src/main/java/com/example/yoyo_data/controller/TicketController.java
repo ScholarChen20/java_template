@@ -86,7 +86,7 @@ public class TicketController {
     /**
      * 查询订单详情
      */
-    @GetMapping("/order/{orderId}")
+    @GetMapping("/{orderId}")
     @ApiOperation(value = "查询订单详情", notes = "根据订单ID查询订单详细信息。需要JWT认证")
     public Result<TicketOrderVO> queryOrder(
             @ApiParam(value = "订单ID", required = true) @PathVariable("orderId") Long orderId,
