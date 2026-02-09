@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 
 import java.io.Serializable;
@@ -73,12 +74,12 @@ public class UserProfile implements Serializable {
      * 创建时间
      */
     @TableField("created_at")
-    @JSONField(format = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss" ,timezone = "GMT+8")
     private LocalDateTime createdAt;
     /**
      * 更新时间
      */
     @TableField("updated_at")
-    @JSONField(format = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss" ,timezone = "GMT+8")
     private LocalDateTime updatedAt;
 }

@@ -1,29 +1,48 @@
 package com.example.yoyo_data.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.date.DateTime;
 import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.StringUtils;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.yoyo_data.common.vo.PostPageVO;
+import com.example.yoyo_data.common.vo.PostVO;
 import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.common.Result;
-import com.example.yoyo_data.common.dto.request.CreatePostRequest;
-import com.example.yoyo_data.common.dto.request.UpdatePostRequest;
+import com.example.yoyo_data.common.dto.PostDTO;
 import com.example.yoyo_data.common.entity.Post;
 import com.example.yoyo_data.common.entity.PostTag;
 import com.example.yoyo_data.common.entity.Tag;
 import com.example.yoyo_data.infrastructure.repository.PostMapper;
 import com.example.yoyo_data.infrastructure.repository.PostTagMapper;
 import com.example.yoyo_data.infrastructure.repository.TagMapper;
+import com.example.yoyo_data.infrastructure.repository.UserProfileMapper;
+import com.example.yoyo_data.infrastructure.repository.mongodb.TravelPlanRepository;
 import com.example.yoyo_data.service.PostService;
+import com.example.yoyo_data.service.TagService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
+
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.TWO_HOURS;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.POST_DETAIL_PREFIX;
+import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.POST_LIST_PREFIX;
 
 /**
  * 帖子服务实现类
  */
 @Slf4j
 @Service
-public class PostServiceImpl implements PostService {
+public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements PostService {
+    @Autowired
+    private UserProfileMapper userProfileMapper;
 
     @Autowired
     private RedisService redisService;
@@ -37,11 +56,129 @@ public class PostServiceImpl implements PostService {
     @Autowired
     private PostTagMapper postTagMapper;
 
+    @Autowired
+    private TravelPlanRepository travelPlanRepository;
+    @Autowired
+    private TagService tagService;
+
+    @Override
+    public Result<?> getPostListByCondition(Integer page, Integer size, Long userId, String title, String content, DateTime beginTime, DateTime endTime) {
+        try {
+            // 缓存键
+            String cacheKey = POST_LIST_PREFIX + page + ":" + size + ":" + (userId != null ? userId : "all") + ":" + (title != null ? title : "") + ":" + (content != null ? content : "") + ":" + (beginTime != null ? beginTime : "") + ":" + (endTime != null ? endTime : "");
+            String cachedPostList = redisService.stringGetString(cacheKey);
+            if (cachedPostList != null) {
+                PostPageVO result = JSON.parseObject(cachedPostList, PostPageVO.class);
+                log.info("从缓存获取帖子列表成功: page={}, size={}, userId={}, title={}, content={}, beginTime={}, endTime={}", page, size, userId, title, content, beginTime, endTime);
+                return Result.success(result);
+            }
+
+            // 构建查询条件
+            LambdaQueryWrapper<Post> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(Post::getUserId, userId);
+            queryWrapper.like(StringUtils.isNotBlank(title), Post::getTitle, title);
+            queryWrapper.like(StringUtils.isNotBlank(content), Post::getContent, content);
+            queryWrapper.between(beginTime != null && endTime != null, Post::getPublishedAt, beginTime, endTime);
+
+            Page<Post> pageParam = new Page<>(page, size);
+            Page<Post> postList = postMapper.selectPage(pageParam, queryWrapper);
+
+            // 构建PostVO
+            List<PostVO> postVOList = postList.getRecords().stream().map(post -> PostVO.builder()
+                    .id(post.getId())
+                    .title(post.getTitle())
+                    .content(post.getContent())
+                    .category(post.getCategory())
+                    .location(post.getLocation())
+                    .tripPlanName(travelPlanRepository.findById(post.getTripPlanId()).isPresent() ?
+                            travelPlanRepository.findById(post.getTripPlanId()).get().getTitle() : "")
+                    .status(post.getStatus())
+                    .viewCount(post.getViewCount())
+                    .likeCount(post.getLikeCount())
+                    .commentCount(post.getCommentCount())
+                    .shareCount(post.getShareCount())
+                    .isModerated(post.getIsModerated())
+                    .moderationStatus(post.getModerationStatus())
+                    .moderationReason(post.getModerationReason())
+                    .createdAt(post.getCreatedAt())
+                    .updatedAt(post.getUpdatedAt())
+                    .publishedAt(post.getPublishedAt())
+                    .tags(tagService.getTagNamesByPostId(post.getId()))
+                    .nickName(userProfileMapper.selectById(post.getUserId()).getFullName())
+                    .mediaUrls(post.getMediaUrls())
+                    .build()
+            ).collect(Collectors.toList());
+
+            PostPageVO postPageVO = PostPageVO.builder()
+                    .total(postList.getTotal())
+                    .page(page)
+                    .size(size)
+                    .postList(postVOList)
+                    .build();
+
+            redisService.stringSetString(cacheKey, JSON.toJSONString(postPageVO), TWO_HOURS);
+            log.info("缓存帖子列表成功: page={}, size={}, userId={}, title={}, content={}, beginTime={}, endTime={}", page, size, userId, title, content, beginTime, endTime);
+
+            return Result.success(postPageVO);
+
+        } catch (Exception e) {
+            log.error("获取帖子列表失败", e);
+            return Result.error("获取帖子列表失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public Result<?> deletePosts(List<Long> postIds, Long userId) {
+        // 1. 都是一个作者，判断与userId是否一致
+        if (!postIds.stream().map(postId -> postMapper.selectById(postId).getUserId()).allMatch(userId::equals)) {
+            return Result.error("帖子作者不一致");
+        }
+
+        return postMapper.deleteBatchIds(postIds) > 0 ? Result.success() : Result.error("删除帖子失败");
+    }
+
+    @Override
+    public Result<?> getPostLikeTopN(Integer topN) {
+        // limit topN
+        topN = Math.min(topN, 10);
+        log.info("获取帖子点赞数topN: topN={}", topN);
+        // 1. 获取topN
+        List<Post> topNPosts = postMapper.selectList(new LambdaQueryWrapper<Post>()
+                .orderByDesc(Post::getLikeCount)
+                .orderByDesc(Post::getPublishedAt)
+                .last("LIMIT " + topN));
+        List<PostVO> postVOList = topNPosts.stream().map(post -> PostVO.builder()
+                .id(post.getId())
+                .title(post.getTitle())
+                .content(post.getContent())
+                .category(post.getCategory())
+                .location(post.getLocation())
+                .tripPlanName(travelPlanRepository.findById(post.getTripPlanId()).isPresent() ?
+                        travelPlanRepository.findById(post.getTripPlanId()).get().getTitle() : "")
+                .status(post.getStatus())
+                .viewCount(post.getViewCount())
+                .likeCount(post.getLikeCount())
+                .commentCount(post.getCommentCount())
+                .shareCount(post.getShareCount())
+                .isModerated(post.getIsModerated())
+                .moderationStatus(post.getModerationStatus())
+                .moderationReason(post.getModerationReason())
+                .createdAt(post.getCreatedAt())
+                .updatedAt(post.getUpdatedAt())
+                .publishedAt(post.getPublishedAt())
+                .tags(tagService.getTagNamesByPostId(post.getId()))
+                .nickName(userProfileMapper.selectById(post.getUserId()).getFullName())
+                .mediaUrls(post.getMediaUrls())
+                .build()
+        ).collect(Collectors.toList());
+        return Result.success(postVOList);
+    }
+
     @Override
     public Result<?> getPostList(Integer page, Integer size, String category) {
         try {
             // 缓存键
-            String cacheKey = "post:list:" + page + ":" + size + ":" + (category != null ? category : "all");
+            String cacheKey = POST_LIST_PREFIX + page + ":" + size + ":" + (category != null ? category : "all");
 
             // 尝试从缓存获取
             String cachedPostList = redisService.stringGetString(cacheKey);
@@ -51,65 +188,60 @@ public class PostServiceImpl implements PostService {
                 return Result.success(result);
             }
 
-            // 计算分页参数
-            int offset = (page - 1) * size;
-
             // 构建查询条件
-            com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Post> queryWrapper = new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+            LambdaQueryWrapper<Post> queryWrapper = new LambdaQueryWrapper<>();
             if (category != null && !category.isEmpty()) {
                 queryWrapper.eq(Post::getCategory, category);
             }
             queryWrapper.orderByDesc(Post::getCreatedAt);
-            queryWrapper.last("LIMIT " + offset + ", " + size);
 
             // 从数据库获取帖子列表
-            List<Post> posts = postMapper.selectList(queryWrapper);
+            Page<Post> pageParam = new Page<>(page, size);
+            Page<Post> postPage = postMapper.selectPage(pageParam, queryWrapper);
 
             // 计算总数
             Long total = postMapper.selectCount(
                     category != null && !category.isEmpty() ?
-                            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Post>().eq(Post::getCategory, category) :
+                            new LambdaQueryWrapper<Post>().eq(Post::getCategory, category) :
                             null
             );
 
             // 构建响应数据
-            List<Map<String, Object>> postList = new ArrayList<>();
-            for (Post post : posts) {
-                Map<String, Object> postInfo = new HashMap<>();
-                postInfo.put("id", post.getId());
-                postInfo.put("userId", post.getUserId());
-                postInfo.put("title", post.getTitle());
-                postInfo.put("content", post.getContent());
-                postInfo.put("category", post.getCategory());
-                postInfo.put("likeCount", post.getLikeCount());
-                postInfo.put("commentCount", post.getCommentCount());
-                postInfo.put("viewCount", post.getViewCount());
-                postInfo.put("createdAt", post.getCreatedAt());
-                postInfo.put("updatedAt", post.getUpdatedAt());
+            List<PostVO> postList = postPage.getRecords().stream().map(post -> PostVO.builder()
+                    .id(post.getId())
+                    .title(post.getTitle())
+                    .content(post.getContent())
+                    .category(post.getCategory())
+                    .location(post.getLocation())
+                    .tripPlanName(travelPlanRepository.findById(post.getTripPlanId()).isPresent() ?
+                            travelPlanRepository.findById(post.getTripPlanId()).get().getTitle() : "")
+                    .status(post.getStatus())
+                    .viewCount(post.getViewCount())
+                    .likeCount(post.getLikeCount())
+                    .commentCount(post.getCommentCount())
+                    .shareCount(post.getShareCount())
+                    .isModerated(post.getIsModerated())
+                    .moderationStatus(post.getModerationStatus())
+                    .moderationReason(post.getModerationReason())
+                    .createdAt(post.getCreatedAt())
+                    .updatedAt(post.getUpdatedAt())
+                    .publishedAt(post.getPublishedAt())
+                    .tags(tagService.getTagNamesByPostId(post.getId()))
+                    .nickName(userProfileMapper.selectById(post.getUserId())==null ? "": userProfileMapper.selectById(post.getUserId()).getFullName())
+                    .mediaUrls(post.getMediaUrls())
+                    .build()
+            ).collect(Collectors.toList());
 
-                // 获取帖子标签
-                List<Tag> tags = tagMapper.selectList(
-                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Tag>()
-                                .inSql(Tag::getId, "SELECT tag_id FROM post_tag WHERE post_id = " + post.getId())
-                );
-                List<String> tagNames = new ArrayList<>();
-                for (Tag tag : tags) {
-                    tagNames.add(tag.getName());
-                }
-                postInfo.put("tags", tagNames);
-
-                postList.add(postInfo);
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("postList", postList);
-            result.put("total", total);
-            result.put("page", page);
-            result.put("size", size);
-            result.put("category", category);
+            PostPageVO result = PostPageVO.builder()
+                    .page(page)
+                    .size(size)
+                    .category(category)
+                    .total(total)
+                    .postList(postList)
+                    .build();
 
             // 存入缓存，设置过期时间为10分钟
-            redisService.stringSetString(cacheKey, JSON.toJSONString(result), 600L);
+            redisService.stringSetString(cacheKey, JSON.toJSONString(result), TWO_HOURS);
 
             log.info("获取帖子列表成功: page={}, size={}, category={}", page, size, category);
             return Result.success(result);
@@ -141,31 +273,21 @@ public class PostServiceImpl implements PostService {
             }
 
             // 构建响应数据
-            Map<String, Object> postDetail = new HashMap<>();
-            postDetail.put("id", post.getId());
-            postDetail.put("userId", post.getUserId());
-            postDetail.put("title", post.getTitle());
-            postDetail.put("content", post.getContent());
-            postDetail.put("category", post.getCategory());
-            postDetail.put("likeCount", post.getLikeCount());
-            postDetail.put("commentCount", post.getCommentCount());
-            postDetail.put("viewCount", post.getViewCount());
-            postDetail.put("createdAt", post.getCreatedAt());
-            postDetail.put("updatedAt", post.getUpdatedAt());
+            Post postDetail = BeanUtil.copyProperties(post, Post.class);
 
             // 获取帖子标签
             List<Tag> tags = tagMapper.selectList(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Tag>()
-                            .inSql(Tag::getId, "SELECT tag_id FROM post_tag WHERE post_id = " + postId)
+                    new LambdaQueryWrapper<Tag>()
+                            .inSql(Tag::getId, "SELECT tag_id FROM post_tags WHERE post_id = " + postId)
             );
             List<String> tagNames = new ArrayList<>();
             for (Tag tag : tags) {
                 tagNames.add(tag.getName());
             }
-            postDetail.put("tags", tagNames);
+            postDetail.setTags(tagNames);
 
             // 存入缓存，设置过期时间为30分钟
-            redisService.stringSetString(cacheKey, JSON.toJSONString(postDetail), 1800L);
+            redisService.stringSetString(cacheKey, JSON.toJSONString(postDetail), TWO_HOURS);
 
             log.info("获取帖子详情成功: postId={}", postId);
             return Result.success(postDetail);
@@ -177,30 +299,27 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
-    public Result<?> createPost(Long userId, CreatePostRequest request) {
+    public Result<?> createPost(Long userId, PostDTO postDTO) {
         try {
             // 创建帖子对象
-            Post post = new Post();
+            Post post = BeanUtil.copyProperties(postDTO, Post.class);
             post.setUserId(userId);
-            post.setTitle(request.getTitle());
-            post.setContent(request.getContent());
-            post.setCategory(request.getCategory());
             post.setLikeCount(0);
             post.setCommentCount(0);
             post.setViewCount(0);
-            post.setCreatedAt(java.time.LocalDateTime.now());
-            post.setUpdatedAt(java.time.LocalDateTime.now());
+            post.setCreatedAt(LocalDateTime.now());
+            post.setUpdatedAt(LocalDateTime.now());
 
             // 保存帖子到数据库
             postMapper.insert(post);
 
             // 处理标签
-            List<String> tags = request.getTags();
+            List<String> tags = postDTO.getTags();
             if (tags != null && !tags.isEmpty()) {
                 for (String tagName : tags) {
                     // 检查标签是否存在
                     Tag tag = tagMapper.selectOne(
-                            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Tag>()
+                            new LambdaQueryWrapper<Tag>()
                                     .eq(Tag::getName, tagName)
                     );
                     
@@ -222,24 +341,12 @@ public class PostServiceImpl implements PostService {
             }
 
             // 构建响应数据
-            Map<String, Object> result = new HashMap<>();
-            result.put("id", post.getId());
-            result.put("userId", post.getUserId());
-            result.put("title", post.getTitle());
-            result.put("content", post.getContent());
-            result.put("category", post.getCategory());
-            result.put("tags", tags);
-            result.put("likeCount", post.getLikeCount());
-            result.put("commentCount", post.getCommentCount());
-            result.put("viewCount", post.getViewCount());
-            result.put("createdAt", post.getCreatedAt());
-            result.put("updatedAt", post.getUpdatedAt());
-
+            post.setTags(tags);
             // 清除帖子列表缓存
-            redisService.delByKeyPrefix("post:list:");
+            redisService.delByKeyPrefix(POST_LIST_PREFIX);
 
-            log.info("创建帖子成功: userId={}, title={}", userId, request.getTitle());
-            return Result.success(result);
+            log.info("创建帖子成功: userId={}, title={}", userId, postDTO.getTitle());
+            return Result.success(post);
 
         } catch (Exception e) {
             log.error("创建帖子失败", e);
@@ -248,7 +355,7 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
-    public Result<?> updatePost(Long postId, Long userId, UpdatePostRequest request) {
+    public Result<?> updatePost(Long postId, Long userId, PostDTO postDTO) {
         try {
             // 从数据库获取帖子
             Post post = postMapper.selectById(postId);
@@ -262,27 +369,29 @@ public class PostServiceImpl implements PostService {
             }
 
             // 更新帖子信息
-            post.setTitle(request.getTitle());
-            post.setContent(request.getContent());
-            post.setCategory(request.getCategory());
-            post.setUpdatedAt(java.time.LocalDateTime.now());
+            post.setTitle(postDTO.getTitle());
+            post.setContent(postDTO.getContent());
+            post.setCategory(postDTO.getCategory());
+            post.setUpdatedAt(LocalDateTime.now());
+            post.setMediaUrls(postDTO.getMediaUrls());
+            post.setTags(postDTO.getTags());
 
             // 保存更新
             postMapper.updateById(post);
 
             // 删除旧的帖子标签关联
             postTagMapper.delete(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PostTag>()
+                    new LambdaQueryWrapper<PostTag>()
                             .eq(PostTag::getPostId, postId)
             );
 
             // 处理新标签
-            List<String> tags = request.getTags();
+            List<String> tags = postDTO.getTags();
             if (tags != null && !tags.isEmpty()) {
                 for (String tagName : tags) {
                     // 检查标签是否存在
                     Tag tag = tagMapper.selectOne(
-                            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Tag>()
+                            new LambdaQueryWrapper<Tag>()
                                     .eq(Tag::getName, tagName)
                     );
                     
@@ -303,23 +412,16 @@ public class PostServiceImpl implements PostService {
                 }
             }
 
-            // 构建响应数据
-            Map<String, Object> result = new HashMap<>();
-            result.put("id", post.getId());
-            result.put("userId", post.getUserId());
-            result.put("title", post.getTitle());
-            result.put("content", post.getContent());
-            result.put("category", post.getCategory());
-            result.put("tags", tags);
-            result.put("updatedAt", post.getUpdatedAt());
+            post.setTags(tags);
+            post.setUpdatedAt(LocalDateTime.now());
 
             // 清除帖子详情缓存
-            redisService.delete("post:detail:" + postId);
+            redisService.delete(POST_DETAIL_PREFIX + postId);
             // 清除帖子列表缓存
-            redisService.delByKeyPrefix("post:list:");
+            redisService.delByKeyPrefix(POST_LIST_PREFIX);
 
             log.info("更新帖子成功: postId={}, userId={}", postId, userId);
-            return Result.success(result);
+            return Result.success(post);
 
         } catch (Exception e) {
             log.error("更新帖子失败", e);
@@ -328,6 +430,7 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
+    @Transactional
     public Result<?> deletePost(Long postId, Long userId) {
         try {
             // 从数据库获取帖子
@@ -343,17 +446,16 @@ public class PostServiceImpl implements PostService {
 
             // 删除帖子标签关联
             postTagMapper.delete(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PostTag>()
+                    new LambdaQueryWrapper<PostTag>()
                             .eq(PostTag::getPostId, postId)
             );
 
             // 删除帖子
             postMapper.deleteById(postId);
-
             // 清除帖子详情缓存
-            redisService.delete("post:detail:" + postId);
+            redisService.delete(POST_DETAIL_PREFIX + postId);
             // 清除帖子列表缓存
-            redisService.delByKeyPrefix("post:list:");
+            redisService.delByKeyPrefix(POST_LIST_PREFIX);
 
             log.info("删除帖子成功: postId={}, userId={}", postId, userId);
             return Result.success("删除帖子成功");
@@ -363,4 +465,6 @@ public class PostServiceImpl implements PostService {
             return Result.error("删除帖子失败: " + e.getMessage());
         }
     }
+
+
 }

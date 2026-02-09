@@ -1,4 +1,4 @@
-package com.example.yoyo_data.common.dto;
+package com.example.yoyo_data.common.vo;
 
 import com.example.yoyo_data.common.entity.Post;
 import lombok.AllArgsConstructor;
@@ -12,7 +12,7 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class PostPageDTO {
+public class PostPageVO {
     /**
      * 页码
      */
@@ -26,9 +26,12 @@ public class PostPageDTO {
      */
     private String category;
     /**
-     * 帖子列表
+     * 总数
      */
     private Long total;
-    private List<Post> postList;
+    /**
+     * 帖子列表
+     */
+    private List<PostVO> postList;
 
 }

@@ -1,5 +1,6 @@
 package com.example.yoyo_data.domain.entity;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

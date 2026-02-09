@@ -1,8 +1,10 @@
-package com.example.yoyo_data.common.dto.request;
+package com.example.yoyo_data.common.dto;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Size;
@@ -13,7 +15,9 @@ import java.util.List;
  */
 @Data
 @ApiModel(value = "CreatePostRequest", description = "创建帖子请求体")
-public class CreatePostRequest {
+@AllArgsConstructor
+@NoArgsConstructor
+public class PostDTO {
 
     @ApiModelProperty(value = "帖子标题", required = true)
     @NotBlank(message = "帖子标题不能为空")
@@ -33,5 +37,5 @@ public class CreatePostRequest {
     private List<String> tags;
 
     @ApiModelProperty(value = "帖子封面图片URL", required = false)
-    private String coverImage;
+    private List<String> mediaUrls;
 }

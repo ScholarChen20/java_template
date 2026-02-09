@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  * 抢票服务实现类 - 核心业务逻辑
  */
 @Slf4j
-@Service
+//@Service("ticketServiceSimple") // 改为备用实现，使用简单 Redis 锁
 public class TicketServiceImpl implements TicketService {
 
     @Autowired
@@ -102,10 +102,10 @@ public class TicketServiceImpl implements TicketService {
 
         try {
             // 4. 检查用户限购
-            Result<Void> limitCheckResult = checkUserPurchaseLimit(userId, dto.getShowEventId(),
+            boolean limitCheckResult = checkUserPurchaseLimit(userId, dto.getShowEventId(),
                     dto.getSeatIds().size(), showEvent.getMaxBuyLimit());
-            if (!limitCheckResult.isSuccess()) {
-                return Result.error(limitCheckResult.getMessage());
+            if (!limitCheckResult) {
+                return Result.error("超过限购数量，每人最多购买" + showEvent.getMaxBuyLimit() + "张");
             }
 
             // 5. 验证座位并锁定
@@ -455,14 +455,11 @@ public class TicketServiceImpl implements TicketService {
         }
     }
 
-    // ========================================
-    // 私有辅助方法
-    // ========================================
 
     /**
      * 检查用户限购
      */
-    private Result<Void> checkUserPurchaseLimit(Long userId, Long showEventId, Integer requestCount, Integer maxBuyLimit) {
+    private boolean checkUserPurchaseLimit(Long userId, Long showEventId, Integer requestCount, Integer maxBuyLimit) {
         LambdaQueryWrapper<UserTicketRecord> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(UserTicketRecord::getUserId, userId)
                 .eq(UserTicketRecord::getShowEventId, showEventId);
@@ -470,11 +467,7 @@ public class TicketServiceImpl implements TicketService {
         UserTicketRecord record = userTicketRecordMapper.selectOne(queryWrapper);
         int currentCount = record == null ? 0 : record.getTicketCount();
 
-        if (currentCount + requestCount > maxBuyLimit) {
-            return Result.error("超过限购数量，每人最多购买" + maxBuyLimit + "张");
-        }
-
-        return Result.success(null);
+        return currentCount + requestCount <= maxBuyLimit;
     }
 
     /**
