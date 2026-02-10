@@ -192,7 +192,7 @@ public class TicketServiceRedissonImpl implements TicketService {
             );
 
             log.info("【抢票结果】execute={}", execute);
-            if(execute != null && execute != 0){
+            if(execute != 0){
                 return Result.error(execute == 1 ? TicketStatus.SEAT_LOCKED_OR_SOLD : TicketStatus.REPEAT_ORDER);
             }
 

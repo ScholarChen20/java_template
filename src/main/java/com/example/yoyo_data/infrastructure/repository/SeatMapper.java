@@ -136,18 +136,19 @@ public interface SeatMapper extends BaseMapper<Seat> {
 
     /**
      * 查询活动下的座位信息
-     * @param id
-     * @return
+     * @param showEventId 演出活动ID
+     * @return 座位缓存DTO列表
      */
-    List<SeatCacheDTO> selectByEventId(Long id);
+    List<SeatCacheDTO> selectByEventId(@Param("showEventId") Long showEventId);
 
     /**
      * 查询活动下的指定座位信息
-     * @param showEventId
-     * @param seatIds
-     * @return
+     * @param showEventId 演出活动ID
+     * @param seatIds 座位ID列表
+     * @return 座位缓存DTO列表
      */
-    List<SeatCacheDTO> selectByEventIdAndSeatIds(Long showEventId, List<Long> seatIds);
+    List<SeatCacheDTO> selectByEventIdAndSeatIds(@Param("showEventId") Long showEventId,
+                                                   @Param("seatIds") List<Long> seatIds);
 
     /**
      * 查询被特定订单锁定的座位（用于回滚清理Redis缓存）

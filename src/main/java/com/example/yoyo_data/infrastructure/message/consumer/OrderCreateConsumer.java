@@ -1,7 +1,11 @@
 package com.example.yoyo_data.infrastructure.message.consumer;
 
 import com.alibaba.fastjson.JSON;
+import com.example.yoyo_data.common.constant.SeatStatus;
+import com.example.yoyo_data.common.constant.TicketRedisKey;
+import com.example.yoyo_data.common.constant.TicketStatus;
 import com.example.yoyo_data.common.dto.OrderCreateEvent;
+import com.example.yoyo_data.common.dto.SeatCacheDTO;
 import com.example.yoyo_data.common.entity.OrderSeat;
 import com.example.yoyo_data.common.entity.UserTicketRecord;
 import com.example.yoyo_data.infrastructure.cache.RedisService;
@@ -16,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.example.yoyo_data.common.constant.KafkaTopic.ORDER_CREATE;
 
@@ -353,7 +358,7 @@ public class OrderCreateConsumer {
                     .map(OrderCreateEvent.SeatInfo::getSeatId)
                     .collect(java.util.stream.Collectors.toList());
 
-            List<com.example.yoyo_data.common.dto.SeatCacheDTO> seats =
+            List<SeatCacheDTO> seats =
                     seatMapper.selectByEventIdAndSeatIds(showEventId, seatIds);
 
             if (seats.isEmpty()) {
@@ -362,26 +367,23 @@ public class OrderCreateConsumer {
             }
 
             // 按分区分组
-            java.util.Map<String, List<com.example.yoyo_data.common.dto.SeatCacheDTO>> seatsByZone =
-                    seats.stream()
+            Map<String, List<SeatCacheDTO>> seatsByZone = seats.stream()
                             .collect(java.util.stream.Collectors.groupingBy(
-                                    com.example.yoyo_data.common.dto.SeatCacheDTO::getSeatZone
+                                    SeatCacheDTO::getSeatZone
                             ));
 
             // 更新Redis缓存：将座位状态从"1"（已锁定）恢复为"0"（可售）
             int totalUpdated = 0;
-            for (java.util.Map.Entry<String, List<com.example.yoyo_data.common.dto.SeatCacheDTO>> entry : seatsByZone.entrySet()) {
+            for (Map.Entry<String, List<SeatCacheDTO>> entry : seatsByZone.entrySet()) {
                 String zone = entry.getKey();
-                List<com.example.yoyo_data.common.dto.SeatCacheDTO> zoneSeats = entry.getValue();
+                List<SeatCacheDTO> zoneSeats = entry.getValue();
 
-                String hashKey = com.example.yoyo_data.common.constant.TicketRedisKey.SEAT_STOCK_PREFIX
-                        + showEventId + ":" + zone;
+                String hashKey = TicketRedisKey.SEAT_STOCK_PREFIX + showEventId + ":" + zone;
 
                 // 批量更新Hash Field
-                for (com.example.yoyo_data.common.dto.SeatCacheDTO seat : zoneSeats) {
+                for (SeatCacheDTO seat : zoneSeats) {
                     String field = seat.getSeatKey(); // "row_col" 格式
-                    stringRedisTemplate.opsForHash().put(hashKey, field,
-                            com.example.yoyo_data.common.constant.SeatStatus.CACHE_AVAILABLE); // "0"
+                    stringRedisTemplate.opsForHash().put(hashKey, field, SeatStatus.CACHE_AVAILABLE); // "0"
                     totalUpdated++;
                 }
             }
@@ -415,7 +417,7 @@ public class OrderCreateConsumer {
             String antiDuplicateKey = "seckill:user:" + userId + ":activity:" + showEventId;
             Boolean deleted = stringRedisTemplate.delete(antiDuplicateKey);
 
-            if (Boolean.TRUE.equals(deleted)) {
+            if (deleted) {
                 log.info("【用户防重key清理】userId={}, showEventId={}, key已删除", userId, showEventId);
             } else {
                 log.warn("【用户防重key清理】userId={}, showEventId={}, key不存在或删除失败", userId, showEventId);
