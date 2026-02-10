@@ -65,10 +65,6 @@ public class TicketRedisKey {
      */
     public static final String TMP_SEATS_PREFIX = "tmp:seats:";
 
-    /**
-     * 秒杀座位缓存前缀：seckill:seat:{showEventId}
-     */
-    public static final String SECKILL_SEAT_PREFIX = "seckill:seat:";
 
 
     /**

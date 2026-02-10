@@ -12,11 +12,11 @@ local orderId = ARGV[4 + seatCount * 3]
 -- 1. 用户防重（按活动）
 local userActivityKey = "seckill:user:" .. userId .. ":activity:" .. activityId
 if redis.call("EXISTS", userActivityKey) == 1 then
-    return 2
+    return 2  -- 重复下单
 end
 
 -- 2. 校验所有座位
-local baseKey = "seckill:seat:" .. activityId
+local baseKey = "ticket:seat:stock:" .. activityId
 for i = 0, seatCount - 1 do
     local idx = 3 + i * 3
     local zone = ARGV[idx]
@@ -24,17 +24,18 @@ for i = 0, seatCount - 1 do
     local col = tonumber(ARGV[idx + 2])
 
     if not zone or not row or not col then
-        return -1
+        return -1  -- 参数错误
     end
 
     -- 检查座位状态
     local status = redis.call("HGET", baseKey .. ":" .. zone, row .. "_" .. col)
-    if status ~= "0" then  -- 只有 "0" 表示可售
+    if not status or status ~= "0" then
+        -- 座位不存在、已锁定或已售出
         return 1
     end
 end
 
--- 3. 原子锁定
+-- 3. 原子锁定所有座位
 for i = 0, seatCount - 1 do
     local idx = 3 + i * 3
     local zone = ARGV[idx]
@@ -46,4 +47,4 @@ end
 -- 4. 记录防重
 redis.call("SET", userActivityKey, orderId, "EX", 3600)
 
-return 0
+return 0  -- 成功

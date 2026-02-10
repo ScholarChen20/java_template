@@ -68,17 +68,6 @@ public interface SeatMapper extends BaseMapper<Seat> {
      * @param seatIds 座位ID列表
      * @return 更新行数
      */
-    @Update("<script>" +
-            "UPDATE tb_seat SET " +
-            "status = 'SOLD', " +
-            "version = version + 1, " +
-            "updated_at = NOW() " +
-            "WHERE id IN " +
-            "<foreach collection='seatIds' item='seatId' open='(' separator=',' close=')'>" +
-            "#{seatId}" +
-            "</foreach> " +
-            "AND status = 'LOCKED'" +
-            "</script>")
     int batchConfirmSeatSold(@Param("seatIds") List<Long> seatIds);
 
     /**
@@ -159,4 +148,11 @@ public interface SeatMapper extends BaseMapper<Seat> {
      * @return
      */
     List<SeatCacheDTO> selectByEventIdAndSeatIds(Long showEventId, List<Long> seatIds);
+
+    /**
+     * 查询被特定订单锁定的座位（用于回滚清理Redis缓存）
+     * @param orderId 订单ID
+     * @return 座位信息列表
+     */
+    List<SeatCacheDTO> selectLockedSeatsByOrderId(@Param("orderId") Long orderId);
 }

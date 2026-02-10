@@ -29,6 +29,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -220,16 +222,35 @@ public class TicketServiceRedissonImpl implements TicketService {
             log.info("【订单创建】orderNo={}, orderId={}, totalAmount={}",
                     orderNo, order.getId(), totalAmount);
 
-            // ========== 第七步：构建订单创建事件并发送到 Kafka（异步处理） ==========
+            // ========== 第七步：构建订单创建事件（准备异步处理） ==========
             ShowEvent showEvent = showEventMapper.selectById(dto.getShowEventId());
             OrderCreateEvent orderCreateEvent = buildOrderCreateEvent(order, seats, dto, showEvent);
+            Long orderId = order.getId();
 
-            sendOrderCreateEvent(orderCreateEvent);
-            log.info("【订单创建事件已发送】orderId={}, orderNo={}", order.getId(), orderNo);
+            // ========== 重要修复：在事务提交后再发送Kafka消息和加入延迟队列 ==========
+            // 问题：如果在事务提交前发送消息，消费者可能查询不到订单（事务还未提交）
+            // 解决：使用TransactionSynchronization，确保事务提交后才执行
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    // 事务提交后执行：此时订单已真正写入数据库
+                    try {
+                        // 1. 发送Kafka消息
+                        sendOrderCreateEvent(orderCreateEvent);
+                        log.info("【订单创建事件已发送】orderId={}, orderNo={}", orderId, orderNo);
 
-            // ========== 第八步：将订单加入延迟队列（15分钟后检查是否支付） ==========
-            orderTimeoutHandler.addOrderToDelayQueue(order.getId(), 15);
-            log.info("【订单加入延迟队列】orderId={}, expireTime={}, delayMinutes=15", order.getId(), order.getExpireTime());
+                        // 2. 加入延迟队列（15分钟后检查是否支付）
+                        orderTimeoutHandler.addOrderToDelayQueue(orderId, 15);
+                        log.info("【订单加入延迟队列】orderId={}, expireTime={}, delayMinutes=15",
+                                orderId, orderCreateEvent.getExpireTime());
+
+                    } catch (Exception e) {
+                        // 注意：这里的异常不会回滚事务（事务已提交）
+                        // 需要有补偿机制或告警通知
+                        log.error("【事务后处理失败】orderId={}, error={}", orderId, e.getMessage(), e);
+                    }
+                }
+            });
 
             // ========== 第九步：构建返回结果（快速响应） ==========
             TicketOrderVO vo = buildOrderVO(order, showEvent, seats);
@@ -765,7 +786,7 @@ public class TicketServiceRedissonImpl implements TicketService {
 
         // 检查座位号与活动匹配
         int isExist = seatMapper.checkSeatExist(eventId, seatIds);
-        if (isExist != seatIds.size()) {
+        if (isExist == 0) {
             log.warn("【抢票失败】座位号与活动不匹配: showEventId={}", eventId);
             return Result.error(TicketStatus.SEAT_NOT_MATCH);
         }
@@ -873,7 +894,7 @@ public class TicketServiceRedissonImpl implements TicketService {
                 String zone = entry.getKey();
                 List<SeatCacheDTO> zoneSeats = entry.getValue();
 
-                String hashKey = "seckill:seat:" + showEventId + ":" + zone;
+                String hashKey = TicketRedisKey.SEAT_STOCK_PREFIX + showEventId + ":" + zone;
 
                 // 批量更新Hash Field
                 for (SeatCacheDTO seat : zoneSeats) {
@@ -918,9 +939,9 @@ public class TicketServiceRedissonImpl implements TicketService {
             luaArgs.add(String.valueOf(seat.getSeatNumber())); // col
         }
 
-        // 添加userId和orderId
         luaArgs.add(userId.toString());                // userId
         luaArgs.add(orderNo);                          // orderId
+        log.info("【构建Lua脚本参数】{}", luaArgs);
         return luaArgs;
     }
 

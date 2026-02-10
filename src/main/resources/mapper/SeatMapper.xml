@@ -3,6 +3,19 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.yoyo_data.infrastructure.repository.SeatMapper">
+    <update id="batchConfirmSeatSold">
+        update tb_seat
+        SET
+            status = 'SOLD',
+            version = version + 1,
+            updated_at = NOW()
+        WHERE
+            id IN
+            <foreach item="seatId" collection="seatIds" separator="," open="(" close=")">
+                #{seatId}
+            </foreach>
+            AND status = 'LOCKED'
+    </update>
     <!-- 检查座位与活动是否关联    -->
     <select id="checkSeatExist" resultType="java.lang.Integer">
         SELECT
@@ -18,8 +31,7 @@
         </where>
     </select>
     <!--  查询活动下的座位信息 -->
-    <select id="selectByEventId" resultType="com.example.yoyo_data.common.dto.SeatCacheDTO"
-            parameterType="java.lang.Long">
+    <select id="selectByEventId" resultType="com.example.yoyo_data.common.dto.SeatCacheDTO">
         SELECT
             seat_zone,
             CONCAT(seat_row, "_", seat_number) AS seat_key,
@@ -43,5 +55,18 @@
             <foreach item="seatId" collection="seatIds" separator="," open="(" close=")">
                 #{seatId}
             </foreach>
+    </select>
+
+    <!-- 查询被特定订单锁定的座位（用于回滚清理Redis缓存） -->
+    <select id="selectLockedSeatsByOrderId" resultType="com.example.yoyo_data.common.dto.SeatCacheDTO">
+        SELECT
+            seat_zone,
+            CONCAT(seat_row, "_", seat_number) AS seat_key,
+            status
+        FROM
+            tb_seat
+        WHERE
+            order_id = #{orderId}
+            AND status = 'LOCKED'
     </select>
 </mapper>
