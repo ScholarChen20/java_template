@@ -73,6 +73,12 @@ public class TicketOrder implements Serializable {
     private String payType;
 
     /**
+     * 第三方支付交易流水号
+     */
+    @TableField("transaction_id")
+    private String transactionId;
+
+    /**
      * 支付时间
      */
     @TableField("pay_time")
@@ -101,6 +107,12 @@ public class TicketOrder implements Serializable {
      */
     @TableField("contact_id_card")
     private String contactIdCard;
+
+    /**
+     * 订单二维码URL（用于入场验证）
+     */
+    @TableField("qr_code_url")
+    private String qrCodeUrl;
 
     /**
      * 备注

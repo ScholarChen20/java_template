@@ -111,6 +111,11 @@ public class KafkaTopic {
     public static final String ORDER_PAID = "order-paid";
 
     /**
+     * 订单支付后置处理事件主题（异步处理座位确认、演出统计、缓存清理）
+     */
+    public static final String ORDER_PAID_POST_PROCESS = "order-paid-post-process";
+
+    /**
      * 订单取消事件主题
      */
     public static final String ORDER_CANCEL = "order-cancel";

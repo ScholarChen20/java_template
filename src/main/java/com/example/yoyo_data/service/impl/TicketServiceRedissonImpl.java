@@ -7,7 +7,10 @@ import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.constant.*;
 import com.example.yoyo_data.common.dto.GrabTicketDTO;
 import com.example.yoyo_data.common.dto.OrderCreateEvent;
+import com.example.yoyo_data.common.dto.OrderPaidPostProcessEvent;
 import com.example.yoyo_data.common.dto.PayOrderDTO;
+import com.example.yoyo_data.common.dto.PaymentRequest;
+import com.example.yoyo_data.common.dto.PaymentResponse;
 import com.example.yoyo_data.common.entity.*;
 import com.example.yoyo_data.common.vo.SeatVO;
 import com.example.yoyo_data.common.vo.TicketOrderVO;
@@ -15,7 +18,9 @@ import com.example.yoyo_data.infrastructure.cache.RedisService;
 import com.example.yoyo_data.infrastructure.message.KafkaProducerTemplate;
 import com.example.yoyo_data.infrastructure.message.MessageEvent;
 import com.example.yoyo_data.infrastructure.repository.*;
+import com.example.yoyo_data.infrastructure.scheduler.OrderTimeoutHandler;
 import com.example.yoyo_data.service.TicketService;
+import com.example.yoyo_data.util.RedisIdWorker;
 import com.example.yoyo_data.util.jwt.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -92,7 +97,13 @@ public class TicketServiceRedissonImpl implements TicketService {
     private KafkaProducerTemplate kafkaProducerTemplate;
 
     @Autowired
-    private com.example.yoyo_data.util.RedisIdWorker redisIdWorker;
+    private RedisIdWorker redisIdWorker;
+
+    @Autowired
+    private OrderTimeoutHandler orderTimeoutHandler;
+
+    @Autowired
+    private com.example.yoyo_data.service.PaymentService paymentService;
 
     /**
      * Lua 脚本，加载脚本内容
@@ -228,8 +239,8 @@ public class TicketServiceRedissonImpl implements TicketService {
             log.info("【订单创建事件已发送】orderId={}, orderNo={}", order.getId(), orderNo);
 
             // ========== 第八步：将订单加入延迟队列（15分钟后检查是否支付） ==========
-            addOrderToDelayQueue(order.getId(), order.getExpireTime());
-            log.info("【订单加入延迟队列】orderId={}, expireTime={}", order.getId(), order.getExpireTime());
+            orderTimeoutHandler.addOrderToDelayQueue(order.getId(), 15);
+            log.info("【订单加入延迟队列】orderId={}, expireTime={}, delayMinutes=15", order.getId(), order.getExpireTime());
 
             // ========== 第九步：构建返回结果（快速响应） ==========
             TicketOrderVO vo = buildOrderVO(order, showEvent, seats);
@@ -278,12 +289,14 @@ public class TicketServiceRedissonImpl implements TicketService {
      * 2. 订单查询和权限校验
      * 3. 订单状态和过期时间校验
      * 4. 查询订单关联的座位
-     * 5. 更新订单状态为已支付
-     * 6. 批量确认座位为已售出（LOCKED → SOLD）
-     * 7. 更新演出活动座位数（locked → sold）
-     * 8. 清除缓存
-     * 9. 发送 Kafka 消息
-     * 10. 构建返回结果
+     * 5. 【重要】调用第三方支付接口完成扣款
+     * 6. 更新订单状态为已支付（包含交易流水号）
+     * 7. 从延迟队列移除订单（支付成功，无需超时处理）
+     * 8. 批量确认座位为已售出（LOCKED → SOLD）
+     * 9. 更新演出活动座位数（locked → sold）
+     * 10. 清除缓存
+     * 11. 发送 Kafka 消息
+     * 12. 构建返回结果
      *
      * @param dto 支付请求参数
      * @param token JWT 认证 token
@@ -298,7 +311,6 @@ public class TicketServiceRedissonImpl implements TicketService {
             return Result.unauthorized("Token无效或已过期");
         }
         Long userId = jwtUtils.getUserIdFromToken(token);
-
         log.info("【支付请求】userId={}, orderId={}, payType={}", userId, dto.getOrderId(), dto.getPayType());
 
         try {
@@ -311,8 +323,7 @@ public class TicketServiceRedissonImpl implements TicketService {
 
             // 验证订单所有权
             if (!order.getUserId().equals(userId)) {
-                log.warn("【支付失败】无权限: userId={}, orderId={}, orderUserId={}",
-                        userId, dto.getOrderId(), order.getUserId());
+                log.warn("【支付失败】无权限: userId={}, orderId={}, orderUserId={}", userId, dto.getOrderId(), order.getUserId());
                 return Result.error("无权限操作此订单");
             }
 
@@ -329,45 +340,85 @@ public class TicketServiceRedissonImpl implements TicketService {
             }
 
             // ========== 第四步：查询订单座位 ==========
-            LambdaQueryWrapper<OrderSeat> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(OrderSeat::getOrderId, dto.getOrderId());
-            List<OrderSeat> orderSeats = orderSeatMapper.selectList(queryWrapper);
+            LambdaQueryWrapper<OrderSeat> orderSeatLambdaQueryWrapper = new LambdaQueryWrapper<>();
+            orderSeatLambdaQueryWrapper.eq(OrderSeat::getOrderId, dto.getOrderId());
+            List<OrderSeat> orderSeats = orderSeatMapper.selectList(orderSeatLambdaQueryWrapper);
             List<Long> seatIds = orderSeats.stream()
                     .map(OrderSeat::getSeatId)
                     .collect(Collectors.toList());
 
-            // ========== 第五步：更新订单状态为已支付 ==========
-            int updateOrderResult = ticketOrderMapper.updateOrderToPaid(
-                    dto.getOrderId(),
-                    dto.getPayType(),
-                    LocalDateTime.now()
-            );
+            // ========== 第五步：调用第三方支付接口完成扣款 ==========
+            log.info("【调用支付接口】开始扣款: orderId={}, orderNo={}, amount={}, payType={}",
+                    dto.getOrderId(), order.getOrderNo(), order.getTotalAmount(), dto.getPayType());
 
-            if (updateOrderResult == 0) {
-                log.warn("【支付失败】订单状态已变更: orderId={}", dto.getOrderId());
-                return Result.error("订单状态已变更，支付失败");
+            // 构建支付请求
+            PaymentRequest paymentRequest = PaymentRequest.builder()
+                    .orderId(order.getId())
+                    .orderNo(order.getOrderNo())
+                    .userId(userId)
+                    .amount(order.getTotalAmount())
+                    .payType(dto.getPayType())
+                    .description("演出门票订单支付 - " + order.getOrderNo())
+                    .clientIp("127.0.0.1") // TODO: 获取真实客户端IP
+                    .notifyUrl("http://localhost:8080/api/payment/notify") // 支付结果回调地址
+                    .build();
+
+            // 调用支付服务
+            Result<PaymentResponse> paymentResult = paymentService.executePayment(paymentRequest);
+
+            // 检查支付结果
+            if (paymentResult.getCode() != 200) {
+                String errorMsg = paymentResult.getMessage();
+                log.error("【支付失败】orderId={}, orderNo={}, payType={}, error={}",
+                        dto.getOrderId(), order.getOrderNo(), dto.getPayType(), errorMsg);
+                return Result.error("支付失败: " + errorMsg);
             }
 
-            log.info("【订单支付】orderId={}, orderNo={}, payType={}",
-                    dto.getOrderId(), order.getOrderNo(), dto.getPayType());
+            PaymentResponse paymentResponse = paymentResult.getData();
+            String transactionId = paymentResponse.getTransactionId();
+            LocalDateTime payTime = paymentResponse.getPayTime();
 
-            // ========== 第六步：批量确认座位为已售出 ==========
-            int updateSeatResult = seatMapper.batchConfirmSeatSold(seatIds);
-            log.info("【座位确认】orderId={}, 预期座位数={}, 实际更新数={}",
-                    dto.getOrderId(), seatIds.size(), updateSeatResult);
+            log.info("【支付成功】orderId={}, orderNo={}, transactionId={}, amount={}, payType={}",
+                    dto.getOrderId(), order.getOrderNo(), transactionId,
+                    paymentResponse.getAmount(), paymentResponse.getPayType());
 
-            // ========== 第七步：更新演出活动座位数 ==========
-            showEventMapper.confirmSeats(order.getShowEventId(), order.getSeatCount());
-            log.info("【演出更新】showEventId={}, 锁定座位-{}, 已售座位+{}",
-                    order.getShowEventId(), order.getSeatCount(), order.getSeatCount());
+            // ========== 第六步：更新订单状态为已支付 ==========
+            int updateOrderResult = ticketOrderMapper.updateOrderToPaidWithTransaction(
+                    dto.getOrderId(),
+                    dto.getPayType(),
+                    transactionId,
+                    payTime
+            );
+            if (updateOrderResult == 0) {
+                log.error("【订单状态更新失败】orderId={}, 可能订单状态已变更", dto.getOrderId());
+                // TODO: 订单状态更新失败，需要调用退款接口退款
+                log.warn("【触发退款】orderId={}, transactionId={}", dto.getOrderId(), transactionId);
+                paymentService.refund(transactionId, order.getTotalAmount().doubleValue(), "订单状态更新失败");
+                return Result.error("订单状态已变更，支付失败");
+            }
+            log.info("【订单支付成功】orderId={}, orderNo={}, transactionId={}, payType={}",
+                    dto.getOrderId(), order.getOrderNo(), transactionId, dto.getPayType());
 
-            // ========== 第八步：清除缓存 ==========
-            clearShowEventCache(order.getShowEventId());
+            // ========== 第七步：发送后置处理事件到 Kafka（异步处理座位确认、演出统计、缓存清理） ==========
+            OrderPaidPostProcessEvent postProcessEvent = OrderPaidPostProcessEvent.builder()
+                    .orderId(dto.getOrderId())
+                    .orderNo(order.getOrderNo())
+                    .userId(userId)
+                    .showEventId(order.getShowEventId())
+                    .seatCount(order.getSeatCount())
+                    .seatIds(seatIds)
+                    .retryCount(0)
+                    .maxRetryCount(3)
+                    .build();
 
-            // ========== 第九步：发送 Kafka 消息 ==========
+            sendOrderPaidPostProcessEvent(postProcessEvent);
+            log.info("【后置处理事件已发送】orderId={}, orderNo={}, 将异步处理: 延迟队列移除、座位确认、演出统计、缓存清理",
+                    dto.getOrderId(), order.getOrderNo());
+
+            // ========== 第八步：发送支付成功事件到 Kafka（异步处理二维码生成、通知、积分） ==========
             sendPayOrderEvent(order);
 
-            // ========== 第十步：构建返回结果 ==========
+            // ========== 第九步：构建返回结果（快速响应，低延迟） ==========
             ShowEvent showEvent = showEventMapper.selectById(order.getShowEventId());
             List<Seat> seats = seatIds.stream()
                     .map(seatMapper::selectById)
@@ -925,27 +976,43 @@ public class TicketServiceRedissonImpl implements TicketService {
     }
 
     /**
-     * 将订单加入延迟队列（Redis ZSet实现）
-     * 用于监控15分钟后订单是否已支付
+     * 发送订单支付后置处理事件到 Kafka
+     * 异步处理座位确认、演出统计、缓存清理
      *
-     * @param orderId 订单ID
-     * @param expireTime 过期时间
+     * @param postProcessEvent 后置处理事件
      */
-    private void addOrderToDelayQueue(Long orderId, LocalDateTime expireTime) {
+    private void sendOrderPaidPostProcessEvent(OrderPaidPostProcessEvent postProcessEvent) {
         try {
-            String delayQueueKey = TicketRedisKey.ORDER_DELAY_QUEUE;
-            // 将过期时间转换为时间戳（秒）作为score
-            long expireTimestamp = expireTime.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+            MessageEvent event = MessageEvent.builder()
+                    .eventType(KafkaTopic.ORDER_PAID_POST_PROCESS)
+                    .source("TicketServiceRedisson")
+                    .userId(postProcessEvent.getUserId())
+                    .data(JSON.toJSONString(postProcessEvent))
+                    .timestamp(LocalDateTime.now())
+                    .createdAt(LocalDateTime.now())
+                    .priority(10) // 最高优先级，快速处理
+                    .build();
 
-            // 使用 ZSet 存储：score为过期时间戳，value为订单ID
-            stringRedisTemplate.opsForZSet().add(delayQueueKey, orderId.toString(), expireTimestamp);
-
-            log.debug("【订单加入延迟队列】orderId={}, expireTime={}, timestamp={}",
-                    orderId, expireTime, expireTimestamp);
+            kafkaProducerTemplate.sendEvent(KafkaTopic.ORDER_PAID_POST_PROCESS, event);
+            log.info("【订单支付后置处理事件发送成功】orderId={}, orderNo={}",
+                    postProcessEvent.getOrderId(), postProcessEvent.getOrderNo());
 
         } catch (Exception e) {
-            log.error("【订单加入延迟队列失败】orderId={}, error={}", orderId, e.getMessage(), e);
-            // 延迟队列添加失败不影响主流程
+            log.error("【订单支付后置处理事件发送失败】orderId={}, orderNo={}, error={}",
+                    postProcessEvent.getOrderId(), postProcessEvent.getOrderNo(), e.getMessage(), e);
+            // 注意：发送失败需要人工处理或重试机制
         }
+    }
+
+    /**
+     * 将订单加入延迟队列（Redisson RDelayedQueue）
+     * 用于监控15分钟后订单是否已支付
+     *
+     * @deprecated 已迁移到 OrderTimeoutHandler，不再使用此方法
+     */
+    @Deprecated
+    private void addOrderToDelayQueue(Long orderId, LocalDateTime expireTime) {
+        // 已废弃，请使用 orderTimeoutHandler.addOrderToDelayQueue(orderId, 15)
+        log.warn("【废弃方法】addOrderToDelayQueue 已废弃，请使用 OrderTimeoutHandler");
     }
 }

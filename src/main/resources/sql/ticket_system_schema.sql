@@ -136,6 +136,24 @@ ALTER TABLE tb_order_seat
 ALTER TABLE tb_order_seat
     ADD INDEX idx_viewer_id_card (viewer_id_card);
 
+-- 订单表添加二维码字段
+ALTER TABLE tb_ticket_order
+    ADD COLUMN qr_code_url VARCHAR(500) COMMENT '订单二维码URL（用于入场验证）' AFTER contact_id_card;
+
+-- 说明：
+-- 1. qr_code_url：存储二维码图片的 MinIO URL
+-- 2. 二维码内容：订单号（orderNo），用于扫码验证入场
+-- 3. 生成时机：订单支付成功后异步生成
+
+-- 订单表添加交易流水号字段
+ALTER TABLE tb_ticket_order
+    ADD COLUMN transaction_id VARCHAR(100) COMMENT '第三方支付交易流水号' AFTER pay_type;
+-- 说明：
+-- 1. transaction_id：存储第三方支付平台（微信/支付宝）返回的交易流水号
+-- 2. 用于后续的退款、对账等操作
+-- 3. 每次支付成功后更新此字段
+
+
 -- ========================================
 -- 表结构升级完成
 -- ========================================

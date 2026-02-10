@@ -1,6 +1,8 @@
-package com.example.yoyo_data.infrastructure.message;
+package com.example.yoyo_data.infrastructure.message.consumer;
 
-import com.example.yoyo_data.infrastructure.service.HighTrafficRequestService;
+import com.example.yoyo_data.infrastructure.message.KafkaConsumerTemplate;
+import com.example.yoyo_data.infrastructure.message.MessageEvent;
+import com.example.yoyo_data.service.CaptchaService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +25,7 @@ import java.time.LocalDateTime;
 public class HighTrafficRequestConsumer extends KafkaConsumerTemplate {
 
     @Autowired
-    private HighTrafficRequestService highTrafficRequestService;
+    private CaptchaService.HighTrafficRequestService highTrafficRequestService;
 
     /**
      * 消费高并发请求消息

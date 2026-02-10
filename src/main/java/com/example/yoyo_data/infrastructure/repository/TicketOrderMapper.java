@@ -33,6 +33,27 @@ public interface TicketOrderMapper extends BaseMapper<TicketOrder> {
                           @Param("payTime") LocalDateTime payTime);
 
     /**
+     * 更新订单状态为已支付（包含交易流水号）
+     * @param orderId 订单ID
+     * @param payType 支付方式
+     * @param transactionId 交易流水号
+     * @param payTime 支付时间
+     * @return 更新行数
+     */
+    @Update("UPDATE tb_ticket_order SET " +
+            "status = 'PAID', " +
+            "pay_type = #{payType}, " +
+            "transaction_id = #{transactionId}, " +
+            "pay_time = #{payTime}, " +
+            "updated_at = NOW() " +
+            "WHERE id = #{orderId} " +
+            "AND status = 'PENDING'")
+    int updateOrderToPaidWithTransaction(@Param("orderId") Long orderId,
+                                         @Param("payType") String payType,
+                                         @Param("transactionId") String transactionId,
+                                         @Param("payTime") LocalDateTime payTime);
+
+    /**
      * 更新订单状态为已取消
      * @param orderId 订单ID
      * @return 更新行数
@@ -67,4 +88,17 @@ public interface TicketOrderMapper extends BaseMapper<TicketOrder> {
             "WHERE status = 'PENDING' " +
             "AND expire_time < #{now}")
     int batchUpdateExpiredOrders(@Param("now") LocalDateTime now);
+
+    /**
+     * 更新订单二维码URL
+     * @param orderId 订单ID
+     * @param qrCodeUrl 二维码URL
+     * @return 更新行数
+     */
+    @Update("UPDATE tb_ticket_order SET " +
+            "qr_code_url = #{qrCodeUrl}, " +
+            "updated_at = NOW() " +
+            "WHERE id = #{orderId}")
+    int updateQRCodeUrl(@Param("orderId") Long orderId,
+                        @Param("qrCodeUrl") String qrCodeUrl);
 }
