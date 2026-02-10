@@ -55,15 +55,15 @@ public interface TicketOrderMapper extends BaseMapper<TicketOrder> {
 
     /**
      * 更新订单状态为已取消
+     *
      * @param orderId 订单ID
-     * @return 更新行数
      */
     @Update("UPDATE tb_ticket_order SET " +
             "status = 'CANCELLED', " +
             "updated_at = NOW() " +
             "WHERE id = #{orderId} " +
             "AND status = 'PENDING'")
-    int updateOrderToCancelled(@Param("orderId") Long orderId);
+    void updateOrderToCancelled(@Param("orderId") Long orderId);
 
     /**
      * 更新订单状态为超时取消

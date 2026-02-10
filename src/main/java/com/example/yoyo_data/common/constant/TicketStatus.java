@@ -1,6 +1,10 @@
 package com.example.yoyo_data.common.constant;
 
 public class TicketStatus {
+    /**
+     * Token无效或已过期
+     */
+    public static final String TOKEN_INVALID = "Token无效或已过期";
 
     // ============================ 抢票 ===============================
     /**
@@ -42,6 +46,11 @@ public class TicketStatus {
      */
     public static final String ORDER_PAY_SUCCESS = "抢票过程中线程被中断，请重试";
 
+    /**
+     * 座位与活动不匹配
+     */
+    public static final String SEAT_NOT_MATCH = "座位与活动不匹配";
+
     // ============================ 订单支付 ===============================
     /**
      * 订单不存在
@@ -59,5 +68,17 @@ public class TicketStatus {
      * 订单已过期
      */
     public static final String ORDER_EXPIRED = "订单已过期";
+    /**
+     * 订单状态已变更，请重新支付
+     */
     public static final String ORDER_STATUS_CHANGED = "订单状态已变更，支付失败";
+
+    // ============================ 订单查询 ===============================
+
+    // ============================ 订单取消 ===============================
+    /**
+     * 成功取消
+     */
+    public static final String CANCEL_SUCCESS = "取消成功";
+
 }

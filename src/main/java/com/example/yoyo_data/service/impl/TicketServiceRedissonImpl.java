@@ -3,14 +3,11 @@ package com.example.yoyo_data.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.constant.*;
-import com.example.yoyo_data.common.dto.GrabTicketDTO;
-import com.example.yoyo_data.common.dto.OrderCreateEvent;
-import com.example.yoyo_data.common.dto.PayOrderDTO;
-import com.example.yoyo_data.common.dto.PaymentRequest;
-import com.example.yoyo_data.common.dto.PaymentResponse;
+import com.example.yoyo_data.common.dto.*;
 import com.example.yoyo_data.common.entity.*;
 import com.example.yoyo_data.common.vo.SeatVO;
 import com.example.yoyo_data.common.vo.TicketOrderVO;
@@ -23,6 +20,7 @@ import com.example.yoyo_data.service.TicketService;
 import com.example.yoyo_data.util.RedisIdWorker;
 import com.example.yoyo_data.util.jwt.JwtUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,7 +36,6 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.example.yoyo_data.common.constant.ShowEventStatus.*;
 import static com.example.yoyo_data.infrastructure.cache.CacheKeyManager.CacheTTL.*;
 
 /**
@@ -144,14 +141,14 @@ public class TicketServiceRedissonImpl implements TicketService {
         // ========== 第一步：Token 验证 ==========
         if (token == null || !jwtUtils.validateToken(token)) {
             log.warn("抢票请求失败: Token无效或已过期");
-            return Result.unauthorized("Token无效或已过期");
+            return Result.unauthorized(TicketStatus.TOKEN_INVALID);
         }
         Long userId = jwtUtils.getUserIdFromToken(token);
 
         log.info("【抢票请求】用户={}, 演出={}, 座位数={}", userId, dto.getShowEventId(), dto.getSeatIds().size());
 
         // ========== 第二步：演出活动校验 ==========
-        Result<?> eventStatus = checkShowEventStatus(dto.getShowEventId(), dto.getSeatIds().size(), dto.getTicketUsers().size(), userId);
+        Result<?> eventStatus = checkShowEventStatus(dto.getShowEventId(), dto.getTicketUsers().size(), userId, dto.getSeatIds());
         if (eventStatus.getCode() == 500) {
             log.warn("【抢票失败】演出活动状态异常: {}", eventStatus.getMessage());
             return Result.error(eventStatus.getMessage());
@@ -166,43 +163,39 @@ public class TicketServiceRedissonImpl implements TicketService {
         try {
             // 尝试获取锁：等待时间 3 秒，锁自动释放时间 30 秒 Watchdog 会每 10 秒检查一次，如果业务还在执行，自动续期 30 秒
             boolean locked = lock.tryLock(3, 30, TimeUnit.SECONDS);
-
             if (!locked) {
                 log.warn("【抢票失败】获取锁超时: userId={}, showEventId={}, 等待时间=3秒", userId, dto.getShowEventId());
                 return Result.error(TicketStatus.REPEAT_REQUEST);
             }
 
             long lockAcquiredTime = System.currentTimeMillis() - lockStartTime;
-            log.info("【锁获取成功】userId={}, showEventId={}, 等待时间={}ms",
-                    userId, dto.getShowEventId(), lockAcquiredTime);
+            log.info("【锁获取成功】userId={}, showEventId={}, 等待时间={}ms", userId, dto.getShowEventId(), lockAcquiredTime);
 
             // ========== 第四步第五步：座位校验和限购校验 =========
-            String tempKey = TicketRedisKey.TMP_SEATS_PREFIX +  UUID.randomUUID().toString().substring(0, 16);
+            // 查询座位信息
             List<Seat> seats = seatMapper.selectBatchIds(dto.getSeatIds());
-            List<String> seatStr = seats.stream()
-                    .filter(seat -> seat.getStatus().equals(SeatStatus.AVAILABLE))
-                    .map(seat -> seat.getSeatZone() + "," + seat.getSeatRow() + "," + seat.getSeatNumber())
-                            .collect(Collectors.toList());
-            log.info("【座位信息汇总】userId={}, showEventId={}, seatCount={}, seatStr={}",
-                    userId, dto.getShowEventId(), seatStr.size(), seatStr);
-            redisService.pipelineSet(tempKey, seatStr, ONE_MINUTE);
+            String orderNo = String.valueOf(redisIdWorker.nextId(TicketRedisKey.TICKET_ORDER_PREFIX));
+            List<String> luaArgs = getLuaArgs(dto, seats, userId, orderNo);
 
-            // 执行 Lua 脚本
-            long execute = stringRedisTemplate.execute(
+            log.info("【座位信息汇总】userId={}, showEventId={}, seatCount={}, seats={}",
+                    userId, dto.getShowEventId(), seats.size(),
+                    seats.stream().map(s -> s.getSeatZone() + "_" + s.getSeatRow() + "_" + s.getSeatNumber())
+                        .collect(Collectors.toList()));
+
+            // 执行 Lua 脚本（从预热的Hash缓存中校验座位）
+            Long execute = stringRedisTemplate.execute(
                     SECKILL_SCRIPT,
                     Collections.emptyList(),
-                    dto.getShowEventId().toString(),
-                    userId.toString(),
-                    String.valueOf(redisIdWorker.nextId(TicketRedisKey.TICKET_ORDER_PREFIX)),
-                    tempKey
+                    luaArgs.toArray(new String[0])
             );
+
             log.info("【抢票结果】execute={}", execute);
-            if(execute != 0){
+            if(execute != null && execute != 0){
                 return Result.error(execute == 1 ? TicketStatus.SEAT_LOCKED_OR_SOLD : TicketStatus.REPEAT_ORDER);
             }
 
             // ========== 第六步：创建订单 ==========
-            String orderNo = String.valueOf(redisIdWorker.nextId(TicketRedisKey.TICKET_ORDER_PREFIX));
+            // orderNo 已在 Lua 脚本参数中生成
             BigDecimal totalAmount = seats.stream()
                     .map(Seat::getPrice)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -276,6 +269,7 @@ public class TicketServiceRedissonImpl implements TicketService {
         }
     }
 
+
     /**
      * 支付订单
      *
@@ -303,7 +297,7 @@ public class TicketServiceRedissonImpl implements TicketService {
         // ========== 第一步：Token 验证 ==========
         if (token == null || !jwtUtils.validateToken(token)) {
             log.warn("支付请求失败: Token无效或已过期");
-            return Result.unauthorized("Token无效或已过期");
+            return Result.unauthorized(TicketStatus.TOKEN_INVALID);
         }
         Long userId = jwtUtils.getUserIdFromToken(token);
         log.info("【支付请求】userId={}, orderId={}, payType={}", userId, dto.getOrderId(), dto.getPayType());
@@ -395,6 +389,9 @@ public class TicketServiceRedissonImpl implements TicketService {
             log.info("【座位确认】orderId={}, 预期座位数={}, 实际更新数={}",
                     orderId, seatIds.size(), updateSeatResult);
 
+            // 同步更新Redis缓存中的座位状态为已售出
+            syncSeatStatusToRedis(order.getShowEventId(), seatIds, SeatStatus.CACHE_SOLD);
+
             // ========== 第九步：更新演出活动座位数 ==========
             showEventMapper.confirmSeats(order.getShowEventId(), order.getSeatCount());
             log.info("【演出更新】showEventId={}, 锁定座位-{}, 已售座位+{}",
@@ -404,7 +401,7 @@ public class TicketServiceRedissonImpl implements TicketService {
             clearShowEventCache(order.getShowEventId());
 
             // ========== 第十一步：发送 Kafka 消息 ==========
-            sendPayOrderEvent(order);
+            sendPayOrderEvent(order, dto.getPayType());
 
             // ========== 第十二步：构建返回结果 ==========
             ShowEvent showEvent = showEventMapper.selectById(order.getShowEventId());
@@ -443,14 +440,13 @@ public class TicketServiceRedissonImpl implements TicketService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result<Void> cancelOrder(Long orderId, String token) {
+    public Result<String> cancelOrder(Long orderId, String token) {
         // ========== 第一步：Token 验证 ==========
         if (token == null || !jwtUtils.validateToken(token)) {
             log.warn("取消订单请求失败: Token无效或已过期");
-            return Result.unauthorized("Token无效或已过期");
+            return Result.unauthorized(TicketStatus.TOKEN_INVALID);
         }
         Long userId = jwtUtils.getUserIdFromToken(token);
-
         log.info("【取消订单请求】userId={}, orderId={}", userId, orderId);
 
         try {
@@ -458,33 +454,33 @@ public class TicketServiceRedissonImpl implements TicketService {
             TicketOrder order = ticketOrderMapper.selectById(orderId);
             if (order == null) {
                 log.warn("【取消失败】订单不存在: orderId={}", orderId);
-                return Result.error("订单不存在");
+                return Result.error(TicketStatus.ORDER_NOT_EXIST);
             }
 
             if (!order.getUserId().equals(userId)) {
-                log.warn("【取消失败】无权限: userId={}, orderId={}, orderUserId={}",
-                        userId, orderId, order.getUserId());
-                return Result.error("无权限操作此订单");
+                log.warn("【取消失败】无权限: userId={}, orderId={}, orderUserId={}", userId, orderId, order.getUserId());
+                return Result.error(TicketStatus.NO_PERMISSION);
             }
 
             // ========== 第三步：订单状态校验 ==========
             if (!OrderStatus.PENDING.equals(order.getStatus())) {
                 log.warn("【取消失败】订单状态异常: orderId={}, status={}", orderId, order.getStatus());
-                return Result.error("订单状态不正确，无法取消");
+                return Result.error(TicketStatus.ORDER_STATUS_ERROR);
             }
 
-            // ========== 第四步：查询订单座位 ==========
+            // ========== 第四步：查询订单座位Id ==========
             List<Long> seatIds = orderSeatMapper.selectIdsByOrderId(orderId);
 
             // ========== 第五步：批量释放座位 ==========
             int releaseSeatResult = seatMapper.batchReleaseSeat(seatIds);
-            log.info("【座位释放】orderId={}, 预期座位数={}, 实际释放数={}",
-                    orderId, seatIds.size(), releaseSeatResult);
+            log.info("【座位释放】orderId={}, 预期座位数={}, 实际释放数={}", orderId, seatIds.size(), releaseSeatResult);
+
+            // 同步更新Redis缓存中的座位状态为可售
+            syncSeatStatusToRedis(order.getShowEventId(), seatIds, SeatStatus.CACHE_AVAILABLE);
 
             // ========== 第六步：更新演出活动座位数 ==========
             showEventMapper.releaseSeats(order.getShowEventId(), order.getSeatCount());
-            log.info("【演出更新】showEventId={}, 锁定座位-{}, 可售座位+{}",
-                    order.getShowEventId(), order.getSeatCount(), order.getSeatCount());
+            log.info("【演出更新】showEventId={}, 锁定座位-{}, 可售座位+{}", order.getShowEventId(), order.getSeatCount(), order.getSeatCount());
 
             // ========== 第七步：更新订单状态为已取消 ==========
             ticketOrderMapper.updateOrderToCancelled(orderId);
@@ -503,7 +499,7 @@ public class TicketServiceRedissonImpl implements TicketService {
 
             log.info("【取消成功】userId={}, orderId={}, orderNo={}", userId, orderId, order.getOrderNo());
 
-            return Result.success(null);
+            return Result.success(TicketStatus.CANCEL_SUCCESS);
 
         } catch (Exception e) {
             log.error("【取消异常】userId={}, orderId={}, error={}", userId, orderId, e.getMessage(), e);
@@ -523,7 +519,7 @@ public class TicketServiceRedissonImpl implements TicketService {
         // Token 验证
         if (token == null || !jwtUtils.validateToken(token)) {
             log.warn("查询订单请求失败: Token无效或已过期");
-            return Result.unauthorized("Token无效或已过期");
+            return Result.unauthorized(TicketStatus.TOKEN_INVALID);
         }
         Long userId = jwtUtils.getUserIdFromToken(token);
 
@@ -537,37 +533,28 @@ public class TicketServiceRedissonImpl implements TicketService {
             }
 
             // 查询订单
-            LambdaQueryWrapper<TicketOrder> orderWrapper = new LambdaQueryWrapper<>();
-            orderWrapper.eq(TicketOrder::getOrderNo, orderId);
-            TicketOrder order = ticketOrderMapper.selectOne(orderWrapper);
+            TicketOrder order = ticketOrderMapper.selectOne(new QueryWrapper<TicketOrder>().eq("id", orderId));
             if (order == null) {
                 log.warn("【查询失败】订单不存在: orderId={}", orderId);
-                return Result.error("订单不存在");
+                return Result.error(TicketStatus.ORDER_NOT_EXIST);
             }
 
             // 验证订单所有权
             if (!order.getUserId().equals(userId)) {
                 log.warn("【查询失败】无权限: userId={}, orderId={}, orderUserId={}",
                         userId, orderId, order.getUserId());
-                return Result.error("无权限查看此订单");
+                return Result.error(TicketStatus.NO_PERMISSION);
             }
 
-            // 查询演出活动
-            ShowEvent showEvent = showEventMapper.selectById(order.getShowEventId());
-
             // 查询订单座位
-            LambdaQueryWrapper<OrderSeat> orderSeatQuery = new LambdaQueryWrapper<>();
-            orderSeatQuery.eq(OrderSeat::getOrderId, orderId);
-            List<OrderSeat> orderSeats = orderSeatMapper.selectList(orderSeatQuery);
-            List<Seat> seats = orderSeats.stream()
-                    .map(os -> seatMapper.selectById(os.getSeatId()))
-                    .collect(Collectors.toList());
+            List<Long> seatIds = orderSeatMapper.selectIdsByOrderId(orderId);
+            List<Seat> seats = seatMapper.selectBatchIds(seatIds);
 
             // 构建返回结果
-            TicketOrderVO vo = buildOrderVO(order, showEvent, seats);
+            TicketOrderVO vo = buildOrderVO(order, showEventMapper.selectById(order.getShowEventId()), seats);
             log.debug("【查询订单】userId={}, orderId={}, status={}", userId, orderId, order.getStatus());
 
-            // 写入redis
+            // 写入缓存
             redisService.stringSetString(cacheKey ,JSON.toJSONString(vo), ONE_HOUR);
             return Result.success(vo);
 
@@ -591,7 +578,7 @@ public class TicketServiceRedissonImpl implements TicketService {
         // Token 验证
         if (token == null || !jwtUtils.validateToken(token)) {
             log.warn("查询订单列表请求失败: Token无效或已过期");
-            return Result.unauthorized("Token无效或已过期");
+            return Result.unauthorized(TicketStatus.TOKEN_INVALID);
         }
         Long userId = jwtUtils.getUserIdFromToken(token);
 
@@ -607,7 +594,6 @@ public class TicketServiceRedissonImpl implements TicketService {
 
             // 按创建时间倒序
             queryWrapper.orderByDesc(TicketOrder::getCreatedAt);
-
             Page<TicketOrder> orderPage = ticketOrderMapper.selectPage(pageParam, queryWrapper);
 
             // 转换为VO
@@ -636,67 +622,6 @@ public class TicketServiceRedissonImpl implements TicketService {
         } catch (Exception e) {
             log.error("【查询列表异常】userId={}, error={}", userId, e.getMessage(), e);
             return Result.error("查询订单列表失败: " + e.getMessage());
-        }
-    }
-
-
-    /**
-     * 检查用户限购
-     *
-     * @param userId 用户ID
-     * @param showEventId 演出活动ID
-     * @param requestCount 本次购票数量
-     * @param maxBuyLimit 最大限购数量
-     * @return 校验结果
-     */
-    private boolean checkUserPurchaseLimit(Long userId, Long showEventId,
-                                                Integer requestCount, Integer maxBuyLimit) {
-        LambdaQueryWrapper<UserTicketRecord> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(UserTicketRecord::getUserId, userId)
-                .eq(UserTicketRecord::getShowEventId, showEventId);
-
-        UserTicketRecord record = userTicketRecordMapper.selectOne(queryWrapper);
-        int currentCount = record == null ? 0 : record.getTicketCount();
-
-        if (currentCount + requestCount > maxBuyLimit) {
-            log.warn("【限购检查】userId={}, 已购={}, 本次购={}, 限购={}",
-                    userId, currentCount, requestCount, maxBuyLimit);
-            return false;
-        }
-
-        log.debug("【限购检查】userId={}, 已购={}, 本次购={}, 限购={}, 校验通过",
-                userId, currentCount, requestCount, maxBuyLimit);
-        return true;
-    }
-
-    /**
-     * 更新用户购票记录
-     *
-     * @param userId 用户ID
-     * @param showEventId 演出活动ID
-     * @param ticketCount 购票数量
-     */
-    private void updateUserTicketRecord(Long userId, Long showEventId, Integer ticketCount) {
-        LambdaQueryWrapper<UserTicketRecord> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(UserTicketRecord::getUserId, userId)
-                .eq(UserTicketRecord::getShowEventId, showEventId);
-
-        UserTicketRecord record = userTicketRecordMapper.selectOne(queryWrapper);
-        if (record == null) {
-            // 首次购票，创建记录
-            record = UserTicketRecord.builder()
-                    .userId(userId)
-                    .showEventId(showEventId)
-                    .ticketCount(ticketCount)
-                    .build();
-            userTicketRecordMapper.insert(record);
-            log.debug("【创建购票记录】userId={}, showEventId={}, ticketCount={}",
-                    userId, showEventId, ticketCount);
-        } else {
-            // 增加购票数（使用原子性 SQL）
-            userTicketRecordMapper.increaseTicketCount(userId, showEventId, ticketCount);
-            log.debug("【更新购票记录】userId={}, showEventId={}, ticketCount+{}",
-                    userId, showEventId, ticketCount);
         }
     }
 
@@ -745,54 +670,17 @@ public class TicketServiceRedissonImpl implements TicketService {
     }
 
     /**
-     * 发送抢票成功事件到 Kafka
-     *
-     * @param order 订单实体
-     * @param seats 座位列表
-     */
-    private void sendGrabTicketEvent(TicketOrder order, List<Seat> seats) {
-        try {
-            Map<String, Object> eventData = new HashMap<>();
-            eventData.put("orderId", order.getId());
-            eventData.put("orderNo", order.getOrderNo());
-            eventData.put("userId", order.getUserId());
-            eventData.put("showEventId", order.getShowEventId());
-            eventData.put("seatCount", order.getSeatCount());
-            eventData.put("totalAmount", order.getTotalAmount());
-            eventData.put("seats", seats.stream().map(Seat::getSeatCode).collect(Collectors.toList()));
-            eventData.put("expireTime", order.getExpireTime());
-
-            MessageEvent event = MessageEvent.builder()
-                    .eventType(KafkaTopic.ORDER_CREATE)
-                    .source("TicketServiceRedisson")
-                    .userId(order.getUserId())
-                    .data(JSON.toJSONString(eventData))
-                    .timestamp(LocalDateTime.now())
-                    .createdAt(LocalDateTime.now())
-                    .priority(8)
-                    .build();
-
-            kafkaProducerTemplate.sendEvent(KafkaTopic.ORDER_CREATE, event);
-            log.debug("【Kafka消息】topic={}, orderNo={}", KafkaTopic.ORDER_CREATE, order.getOrderNo());
-
-        } catch (Exception e) {
-            // Kafka 发送失败不影响主流程
-            log.warn("【Kafka发送失败】orderNo={}, error={}", order.getOrderNo(), e.getMessage());
-        }
-    }
-
-    /**
      * 发送支付订单事件到 Kafka
      *
      * @param order 订单实体
      */
-    private void sendPayOrderEvent(TicketOrder order) {
+    private void sendPayOrderEvent(TicketOrder order, String payType) {
         try {
             Map<String, Object> eventData = new HashMap<>();
             eventData.put("orderId", order.getId());
             eventData.put("orderNo", order.getOrderNo());
             eventData.put("userId", order.getUserId());
-            eventData.put("payType", order.getPayType());
+            eventData.put("payType", payType);
             eventData.put("totalAmount", order.getTotalAmount());
             eventData.put("payTime", order.getPayTime());
 
@@ -845,7 +733,7 @@ public class TicketServiceRedissonImpl implements TicketService {
         }
     }
 
-    private Result<?> checkShowEventStatus(long eventId, int seatSize, int userSize, long userId){
+    private Result<?> checkShowEventStatus(long eventId, int userSize, long userId, List<Long> seatIds){
         ShowEvent showEvent = showEventMapper.selectById(eventId);
         if (showEvent == null) {
             log.warn("【抢票失败】演出不存在: showEventId={}", eventId);
@@ -870,10 +758,18 @@ public class TicketServiceRedissonImpl implements TicketService {
         }
 
         // 验证座位数量与观影人数量一致
-        if (seatSize != userSize) {
-            log.warn("【抢票失败】座位数量与观影人数量不一致: seatCount={}, userCount={}, userId={}", seatSize, userSize, userId);
+        if (seatIds.size() != userSize) {
+            log.warn("【抢票失败】座位数量与观影人数量不一致: seatCount={}, userCount={}, userId={}", seatIds.size(), userSize, userId);
             return Result.error(TicketStatus.SEAT_NUM_NOT_EQUAL_TO_VIEWER_NUM);
         }
+
+        // 检查座位号与活动匹配
+        int isExist = seatMapper.checkSeatExist(eventId, seatIds);
+        if (isExist != seatIds.size()) {
+            log.warn("【抢票失败】座位号与活动不匹配: showEventId={}", eventId);
+            return Result.error(TicketStatus.SEAT_NOT_MATCH);
+        }
+
         return Result.success();
     }
 
@@ -953,4 +849,79 @@ public class TicketServiceRedissonImpl implements TicketService {
             // 注意：发送失败需要人工处理或重试机制
         }
     }
+
+    /**
+     * 同步更新Redis缓存中的座位状态
+     * 确保数据库与Redis缓存一致性
+     *
+     * @param showEventId 演出活动ID
+     * @param seatIds 座位ID列表
+     * @param status 座位状态（"0"=可售, "1"=已锁定, "2"=已售出）
+     */
+    private void syncSeatStatusToRedis(Long showEventId, List<Long> seatIds, String status) {
+        try {
+            // 查询座位信息
+            List<SeatCacheDTO> seats = seatMapper.selectByEventIdAndSeatIds(showEventId, seatIds);
+
+            // 按分区分组
+            Map<String, List<SeatCacheDTO>> seatsByZone = seats.stream()
+                    .collect(Collectors.groupingBy(SeatCacheDTO::getSeatZone));
+
+            // 更新Redis缓存
+            int totalUpdated = 0;
+            for (Map.Entry<String, List<SeatCacheDTO>> entry : seatsByZone.entrySet()) {
+                String zone = entry.getKey();
+                List<SeatCacheDTO> zoneSeats = entry.getValue();
+
+                String hashKey = "seckill:seat:" + showEventId + ":" + zone;
+
+                // 批量更新Hash Field
+                for (SeatCacheDTO seat : zoneSeats) {
+                    String field = seat.getSeatKey();
+                    stringRedisTemplate.opsForHash().put(hashKey, field, status);
+                    totalUpdated++;
+                }
+            }
+
+            log.info("【Redis缓存同步】showEventId={}, seatCount={}, status={}, zones={}",
+                    showEventId, totalUpdated, status, seatsByZone.keySet());
+
+        } catch (Exception e) {
+            // Redis同步失败不影响主流程，只记录日志
+            log.error("【Redis缓存同步失败】showEventId={}, seatCount={}, status={}, error={}",
+                    showEventId, seatIds.size(), status, e.getMessage(), e);
+        }
+    }
+    /**
+     * 构建Lua脚本参数
+     * @param dto
+     * @param seats
+     * @param userId
+     * @param orderNo
+     * @return
+     */
+    private static @NonNull List<String> getLuaArgs(GrabTicketDTO dto, List<Seat> seats, Long userId, String orderNo) {
+        // 构建Lua脚本参数
+        // ARGV[1] = activityId
+        // ARGV[2] = seatCount
+        // ARGV[3~n] = zone1, row1, col1, zone2, row2, col2, ...
+        // ARGV[n+1] = userId
+        // ARGV[n+2] = orderId
+        List<String> luaArgs = new ArrayList<>();
+        luaArgs.add(dto.getShowEventId().toString());  // ARGV[1]: activityId
+        luaArgs.add(String.valueOf(seats.size()));     // ARGV[2]: seatCount
+
+        // 添加所有座位信息（zone, row, col）
+        for (Seat seat : seats) {
+            luaArgs.add(seat.getSeatZone());           // zone
+            luaArgs.add(String.valueOf(seat.getSeatRow()));  // row
+            luaArgs.add(String.valueOf(seat.getSeatNumber())); // col
+        }
+
+        // 添加userId和orderId
+        luaArgs.add(userId.toString());                // userId
+        luaArgs.add(orderNo);                          // orderId
+        return luaArgs;
+    }
+
 }

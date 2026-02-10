@@ -3,5 +3,45 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.example.yoyo_data.infrastructure.repository.SeatMapper">
-
+    <!-- 检查座位与活动是否关联    -->
+    <select id="checkSeatExist" resultType="java.lang.Integer">
+        SELECT
+            IF(COUNT(id) = 0, 0, 1) AS num
+        FROM
+            tb_seat
+        <where>
+            id IN
+            <foreach item="seatId" collection="seatIds" separator="," open="(" close=")">
+                #{seatId}
+            </foreach>
+          AND show_event_id = #{eventId}
+        </where>
+    </select>
+    <!--  查询活动下的座位信息 -->
+    <select id="selectByEventId" resultType="com.example.yoyo_data.common.dto.SeatCacheDTO"
+            parameterType="java.lang.Long">
+        SELECT
+            seat_zone,
+            CONCAT(seat_row, "_", seat_number) AS seat_key,
+            status
+        FROM
+            tb_seat
+        WHERE
+            show_event_id = #{showEventId}
+    </select>
+    <!-- 查询活动下的指定座位信息    -->
+    <select id="selectByEventIdAndSeatIds" resultType="com.example.yoyo_data.common.dto.SeatCacheDTO">
+        SELECT
+            seat_zone,
+            CONCAT(seat_row, "_", seat_number) AS seat_key,
+            status
+        FROM
+            tb_seat
+        WHERE
+            show_event_id = #{showEventId}
+            AND id IN
+            <foreach item="seatId" collection="seatIds" separator="," open="(" close=")">
+                #{seatId}
+            </foreach>
+    </select>
 </mapper>

@@ -29,7 +29,7 @@ public class GrabTicketDTO {
      * 座位ID列表（用户选择的座位）
      */
     @NotEmpty(message = "座位列表不能为空")
-    @Size(min = 1, max = 10, message = "每次最多选择10个座位")
+    @Size(min = 1, max = 5, message = "每次最多选择10个座位")
     private List<Long> seatIds;
 
     /**

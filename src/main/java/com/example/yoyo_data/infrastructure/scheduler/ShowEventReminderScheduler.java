@@ -52,9 +52,9 @@ public class ShowEventReminderScheduler {
 
     /**
      * 定时扫描演出活动，发送开票提醒
-     * 每分钟执行一次（可根据实际需求调整）
+     * 每天的11,12,13,14,15时间点10分钟执行一次（可根据实际需求调整）
      */
-    @Scheduled(cron = "0 * * * * ?") // 每分钟的第0秒执行
+    @Scheduled(cron = "0 0/10 11,12,13,14,15 * * ? ") // 每30分钟的执行
     public void scanShowEventsForReminders() {
         try {
             log.debug("【演出提醒扫描】开始扫描演出活动...");

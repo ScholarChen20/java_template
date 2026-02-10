@@ -59,10 +59,16 @@ public class TicketRedisKey {
      * 订单缓存前缀：ticket_order:{orderId}
      */
     public static final String TICKET_ORDER_PREFIX = "ticket_order";
+
     /**
      * 临时座位缓存前缀：tmp:seats:{showEventId}
      */
     public static final String TMP_SEATS_PREFIX = "tmp:seats:";
+
+    /**
+     * 秒杀座位缓存前缀：seckill:seat:{showEventId}
+     */
+    public static final String SECKILL_SEAT_PREFIX = "seckill:seat:";
 
 
     /**

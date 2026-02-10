@@ -22,12 +22,12 @@ import java.time.LocalDateTime;
 @TableName(value = "tb_ticket_order")
 public class TicketOrder implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L; // 避免主键冲突
 
     /**
      * 订单ID
      */
-    @TableId(value = "id", type = IdType.AUTO)
+    @TableId(value = "id", type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

@@ -316,7 +316,7 @@ public class TicketServiceImpl implements TicketService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result<Void> cancelOrder(Long orderId, String token) {
+    public Result<String> cancelOrder(Long orderId, String token) {
         // 1. 验证 token
         if (token == null || !jwtUtils.validateToken(token)) {
             return Result.unauthorized("Token无效或已过期");

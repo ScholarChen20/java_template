@@ -1,6 +1,7 @@
 package com.example.yoyo_data.service.impl;
 
 import com.example.yoyo_data.common.Result;
+import com.example.yoyo_data.common.constant.PayType;
 import com.example.yoyo_data.common.dto.PaymentRequest;
 import com.example.yoyo_data.common.dto.PaymentResponse;
 import com.example.yoyo_data.service.PaymentService;
@@ -48,15 +49,15 @@ public class PaymentServiceImpl implements PaymentService {
             // 根据支付方式调用不同的支付接口
             PaymentResponse response;
             switch (request.getPayType()) {
-                case "WECHAT":
+                case PayType.WECHAT:
                     response = processWeChatPayment(request);
                     break;
 
-                case "ALIPAY":
+                case PayType.ALIPAY:
                     response = processAlipayPayment(request);
                     break;
 
-                case "CARD":
+                case PayType.CARD:
                     response = processCardPayment(request);
                     break;
 
@@ -109,7 +110,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .transactionId("WX" + UUID.randomUUID().toString().replace("-", "").substring(0, 28))
                     .orderNo(request.getOrderNo())
                     .amount(request.getAmount())
-                    .payType("WECHAT")
+                    .payType(request.getPayType())
                     .status("SUCCESS")
                     .payTime(LocalDateTime.now())
                     .rawResponse("{\"return_code\":\"SUCCESS\",\"result_code\":\"SUCCESS\",\"trade_type\":\"JSAPI\"}")
@@ -121,7 +122,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .transactionId(null)
                     .orderNo(request.getOrderNo())
                     .amount(request.getAmount())
-                    .payType("WECHAT")
+                    .payType(request.getPayType())
                     .status("FAILED")
                     .payTime(LocalDateTime.now())
                     .errorCode("INSUFFICIENT_BALANCE")
@@ -157,7 +158,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .transactionId("ALI" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 16))
                     .orderNo(request.getOrderNo())
                     .amount(request.getAmount())
-                    .payType("ALIPAY")
+                    .payType(request.getPayType())
                     .status("SUCCESS")
                     .payTime(LocalDateTime.now())
                     .rawResponse("{\"code\":\"10000\",\"msg\":\"Success\",\"trade_status\":\"TRADE_SUCCESS\"}")
@@ -169,7 +170,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .transactionId(null)
                     .orderNo(request.getOrderNo())
                     .amount(request.getAmount())
-                    .payType("ALIPAY")
+                    .payType(request.getPayType())
                     .status("FAILED")
                     .payTime(LocalDateTime.now())
                     .errorCode("PAYMENT_FAILED")
@@ -205,7 +206,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .transactionId("CARD" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 14))
                     .orderNo(request.getOrderNo())
                     .amount(request.getAmount())
-                    .payType("CARD")
+                    .payType(request.getPayType())
                     .status("SUCCESS")
                     .payTime(LocalDateTime.now())
                     .rawResponse("{\"respCode\":\"00\",\"respMsg\":\"交易成功\"}")
@@ -217,7 +218,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .transactionId(null)
                     .orderNo(request.getOrderNo())
                     .amount(request.getAmount())
-                    .payType("CARD")
+                    .payType(request.getPayType())
                     .status("FAILED")
                     .payTime(LocalDateTime.now())
                     .errorCode("CARD_DECLINED")
