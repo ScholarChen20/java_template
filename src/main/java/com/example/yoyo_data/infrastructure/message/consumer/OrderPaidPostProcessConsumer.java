@@ -36,7 +36,8 @@ import static com.example.yoyo_data.common.constant.KafkaTopic.ORDER_PAID_POST_P
  * @since 2026-02-10
  */
 @Slf4j
-@Component
+//@Component
+@Deprecated
 public class OrderPaidPostProcessConsumer {
 
     @Autowired
@@ -192,7 +193,6 @@ public class OrderPaidPostProcessConsumer {
         try {
             String cacheKey = TicketRedisKey.SHOW_DETAIL_PREFIX + event.getShowEventId();
             redisService.delete(cacheKey);
-
             log.info("【缓存清除-成功】showEventId={}, cacheKey={}",
                     event.getShowEventId(), cacheKey);
 
