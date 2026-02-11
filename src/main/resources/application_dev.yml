@@ -49,8 +49,8 @@ sls-log:
 kafka:
   bootstrap-servers: localhost:9092
   producer:
-    retries: 0
-    acks: all
+    retries: 3  # 重试次数
+    acks: all   # acks
     batch-size: 16384
     properties.linger.ms: 0
     buffer-memory: 33554432

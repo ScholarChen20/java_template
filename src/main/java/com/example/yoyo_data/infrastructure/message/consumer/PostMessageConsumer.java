@@ -1,8 +1,9 @@
-package com.example.yoyo_data.infrastructure.message.post;
+package com.example.yoyo_data.infrastructure.message.consumer;
 
 import com.alibaba.fastjson.JSON;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.PostDTO;
+import com.example.yoyo_data.infrastructure.message.MessageEvent;
 import com.example.yoyo_data.service.PostService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +35,7 @@ public class PostMessageConsumer {
 
         try {
             // 解析消息
-            PostMessageEvent event = JSON.parseObject(message, PostMessageEvent.class);
+            MessageEvent.PostMessageEvent event = JSON.parseObject(message, MessageEvent.PostMessageEvent.class);
             log.info("解析帖子创建事件: eventId={}, eventType={}, userId={}", 
                     event.getEventId(), event.getEventType(), event.getUserId());
 
@@ -72,7 +73,7 @@ public class PostMessageConsumer {
 
         try {
             // 解析消息
-            PostMessageEvent event = JSON.parseObject(message, PostMessageEvent.class);
+            MessageEvent.PostMessageEvent event = JSON.parseObject(message, MessageEvent.PostMessageEvent.class);
             log.info("解析帖子更新事件: eventId={}, eventType={}, postId={}", 
                     event.getEventId(), event.getEventType(), event.getPostId());
 
@@ -99,7 +100,7 @@ public class PostMessageConsumer {
 
         try {
             // 解析错误消息
-            PostMessageEvent event = JSON.parseObject(message, PostMessageEvent.class);
+            MessageEvent.PostMessageEvent event = JSON.parseObject(message, MessageEvent.PostMessageEvent.class);
             log.warn("解析帖子错误事件: eventId={}, errorMessage={}", 
                     event.getEventId(), event.getErrorMessage());
 

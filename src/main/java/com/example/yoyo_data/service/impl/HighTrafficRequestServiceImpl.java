@@ -1,7 +1,7 @@
-package com.example.yoyo_data.infrastructure.service.impl;
+package com.example.yoyo_data.service.impl;
 
 import com.example.yoyo_data.infrastructure.message.MessageEvent;
-import com.example.yoyo_data.infrastructure.service.HighTrafficRequestService;
+import com.example.yoyo_data.service.CaptchaService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Slf4j
 @Service
-public class HighTrafficRequestServiceImpl implements HighTrafficRequestService {
+public class HighTrafficRequestServiceImpl implements CaptchaService.HighTrafficRequestService {
 
     // 请求处理状态缓存
     private final Map<String, RequestStatus> requestStatusMap = new ConcurrentHashMap<>();

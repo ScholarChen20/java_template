@@ -22,12 +22,12 @@ import java.time.LocalDateTime;
 @TableName(value = "tb_ticket_order")
 public class TicketOrder implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L; // 避免主键冲突
 
     /**
      * 订单ID
      */
-    @TableId(value = "id", type = IdType.AUTO)
+    @TableId(value = "id", type = IdType.ASSIGN_ID)
     private Long id;
 
     /**
@@ -73,6 +73,12 @@ public class TicketOrder implements Serializable {
     private String payType;
 
     /**
+     * 第三方支付交易流水号
+     */
+    @TableField("transaction_id")
+    private String transactionId;
+
+    /**
      * 支付时间
      */
     @TableField("pay_time")
@@ -101,6 +107,12 @@ public class TicketOrder implements Serializable {
      */
     @TableField("contact_id_card")
     private String contactIdCard;
+
+    /**
+     * 订单二维码URL（用于入场验证）
+     */
+    @TableField("qr_code_url")
+    private String qrCodeUrl;
 
     /**
      * 备注

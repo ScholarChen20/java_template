@@ -71,7 +71,7 @@ public class TicketController {
      */
     @PostMapping("/cancel/{orderId}")
     @ApiOperation(value = "取消订单", notes = "取消待支付状态的订单，释放座位。需要JWT认证")
-    public Result<Void> cancelOrder(
+    public Result<String> cancelOrder(
             @ApiParam(value = "订单ID", required = true) @PathVariable("orderId") Long orderId,
             HttpServletRequest request
     ) {

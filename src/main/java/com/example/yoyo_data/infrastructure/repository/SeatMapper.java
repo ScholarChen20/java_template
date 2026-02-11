@@ -1,6 +1,7 @@
 package com.example.yoyo_data.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.example.yoyo_data.common.dto.SeatCacheDTO;
 import com.example.yoyo_data.common.entity.Seat;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -67,17 +68,6 @@ public interface SeatMapper extends BaseMapper<Seat> {
      * @param seatIds 座位ID列表
      * @return 更新行数
      */
-    @Update("<script>" +
-            "UPDATE tb_seat SET " +
-            "status = 'SOLD', " +
-            "version = version + 1, " +
-            "updated_at = NOW() " +
-            "WHERE id IN " +
-            "<foreach collection='seatIds' item='seatId' open='(' separator=',' close=')'>" +
-            "#{seatId}" +
-            "</foreach> " +
-            "AND status = 'LOCKED'" +
-            "</script>")
     int batchConfirmSeatSold(@Param("seatIds") List<Long> seatIds);
 
     /**
@@ -136,4 +126,34 @@ public interface SeatMapper extends BaseMapper<Seat> {
             "AND lock_expire_time < #{now}")
     int releaseExpiredSeats(@Param("now") LocalDateTime now);
 
+    /**
+     * 检查座位与活动是否关联
+     * @param eventId
+     * @param seatIds
+     * @return
+     */
+    int checkSeatExist(@Param("eventId") long eventId, @Param("seatIds") @Size(min = 1, max = 5) List<Long> seatIds);
+
+    /**
+     * 查询活动下的座位信息
+     * @param showEventId 演出活动ID
+     * @return 座位缓存DTO列表
+     */
+    List<SeatCacheDTO> selectByEventId(@Param("showEventId") Long showEventId);
+
+    /**
+     * 查询活动下的指定座位信息
+     * @param showEventId 演出活动ID
+     * @param seatIds 座位ID列表
+     * @return 座位缓存DTO列表
+     */
+    List<SeatCacheDTO> selectByEventIdAndSeatIds(@Param("showEventId") Long showEventId,
+                                                   @Param("seatIds") List<Long> seatIds);
+
+    /**
+     * 查询被特定订单锁定的座位（用于回滚清理Redis缓存）
+     * @param orderId 订单ID
+     * @return 座位信息列表
+     */
+    List<SeatCacheDTO> selectLockedSeatsByOrderId(@Param("orderId") Long orderId);
 }

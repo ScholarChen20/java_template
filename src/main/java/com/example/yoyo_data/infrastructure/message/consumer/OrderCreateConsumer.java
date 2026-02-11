@@ -1,7 +1,11 @@
 package com.example.yoyo_data.infrastructure.message.consumer;
 
 import com.alibaba.fastjson.JSON;
+import com.example.yoyo_data.common.constant.SeatStatus;
+import com.example.yoyo_data.common.constant.TicketRedisKey;
+import com.example.yoyo_data.common.constant.TicketStatus;
 import com.example.yoyo_data.common.dto.OrderCreateEvent;
+import com.example.yoyo_data.common.dto.SeatCacheDTO;
 import com.example.yoyo_data.common.entity.OrderSeat;
 import com.example.yoyo_data.common.entity.UserTicketRecord;
 import com.example.yoyo_data.infrastructure.cache.RedisService;
@@ -16,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.example.yoyo_data.common.constant.KafkaTopic.ORDER_CREATE;
 
@@ -48,6 +53,12 @@ public class OrderCreateConsumer {
 
     @Autowired
     private RedisService redisService;
+
+    @Autowired
+    private com.example.yoyo_data.infrastructure.scheduler.OrderTimeoutHandler orderTimeoutHandler;
+
+    @Autowired
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     /**
      * 消费订单创建事件
@@ -147,7 +158,7 @@ public class OrderCreateConsumer {
                             orderEvent.getOrderId());
 
                     // 回滚：取消订单，释放已锁定的座位
-                    rollbackOrder(orderEvent.getOrderId(), lockedSeatIds);
+                    rollbackOrder(orderEvent, lockedSeatIds);
                     throw new RuntimeException("座位已被其他用户抢走: " + seatInfo.getSeatCode());
                 }
 
@@ -157,7 +168,7 @@ public class OrderCreateConsumer {
                 log.error("【座位锁定失败】seatId={}, orderId={}, error={}",
                         seatInfo.getSeatId(), orderEvent.getOrderId(), e.getMessage(), e);
                 // 回滚：取消订单，释放已锁定的座位
-                rollbackOrder(orderEvent.getOrderId(), lockedSeatIds);
+                rollbackOrder(orderEvent, lockedSeatIds);
                 throw new RuntimeException("座位锁定失败", e);
             }
         }
@@ -184,7 +195,7 @@ public class OrderCreateConsumer {
                     orderEvent.getOrderId());
 
             // 回滚：取消订单，释放座位
-            rollbackOrder(orderEvent.getOrderId(), orderEvent.getSeatIds());
+            rollbackOrder(orderEvent, orderEvent.getSeatIds());
             throw new RuntimeException("演出座位库存更新失败，请重试");
         }
     }
@@ -273,25 +284,168 @@ public class OrderCreateConsumer {
     /**
      * 回滚订单（取消订单并释放座位）
      *
-     * @param orderId 订单ID
-     * @param lockedSeatIds 已锁定的座位ID列表
+     * @param orderEvent 订单创建事件（包含showEventId、userId等信息）
+     * @param lockedSeatIds 已锁定的座位ID列表（数据库中已锁定的座位）
      */
-    private void rollbackOrder(Long orderId, List<Long> lockedSeatIds) {
+    private void rollbackOrder(OrderCreateEvent orderEvent, List<Long> lockedSeatIds) {
+        Long orderId = orderEvent.getOrderId();
+        Long userId = orderEvent.getUserId();
+        Long showEventId = orderEvent.getShowEventId();
+
         try {
-            log.warn("【订单回滚开始】orderId={}, 需释放座位数={}", orderId, lockedSeatIds.size());
+            log.warn("【订单回滚开始】orderId={}, userId={}, showEventId={}, 需释放座位数={}",
+                    orderId, userId, showEventId, lockedSeatIds.size());
 
-            // 1. 取消订单状态
-            ticketOrderMapper.updateOrderToCancelled(orderId);
+            // 查询订单信息（如果事务未提交，订单可能不存在）
+            com.example.yoyo_data.common.entity.TicketOrder order = ticketOrderMapper.selectById(orderId);
 
-            // 2. 释放已锁定的座位
-            if (!lockedSeatIds.isEmpty()) {
-                seatMapper.batchReleaseSeat(lockedSeatIds);
+            // 1. 取消订单状态（如果订单存在）
+            if (order != null) {
+                ticketOrderMapper.updateOrderToCancelled(orderId);
+                log.info("【订单状态更新】orderId={}, status -> CANCELLED", orderId);
+            } else {
+                log.warn("【订单不存在】orderId={}, 可能事务未提交或已被删除，跳过订单状态更新", orderId);
             }
 
-            log.warn("【订单回滚完成】orderId={}, 已释放座位数={}", orderId, lockedSeatIds.size());
+            // 2. 释放数据库中已锁定的座位（如果有）
+            int releasedCount = 0;
+            if (!lockedSeatIds.isEmpty()) {
+                releasedCount = seatMapper.batchReleaseSeat(lockedSeatIds);
+                log.info("【数据库座位释放】orderId={}, 预期释放数={}, 实际释放数={}",
+                        orderId, lockedSeatIds.size(), releasedCount);
+            }
+
+            // 3. 【关键修复】清理Redis座位缓存（将Lua脚本已锁定的座位恢复为可售状态）
+            // 注意：即使订单不存在，Redis中的座位可能已被Lua脚本锁定
+            // 使用orderEvent中的座位信息清理Redis
+            clearRedisSeatCacheByEvent(orderEvent);
+
+            // 4. 【关键修复】删除用户防重key（允许用户重新下单）
+            clearUserAntiDuplicateKey(userId, showEventId);
+
+            // 5. 【关键修复】从延迟队列移除订单（避免超时处理重复执行）
+            // 注意：如果订单不存在，延迟队列中可能也没有（因为事务后操作还没执行）
+            removeOrderFromDelayQueue(orderId);
+
+            log.warn("【订单回滚完成】orderId={}, 数据库座位释放数={}, Redis缓存已清理, 延迟队列已移除",
+                    orderId, releasedCount);
 
         } catch (Exception e) {
             log.error("【订单回滚失败】orderId={}, error={}", orderId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 清理Redis座位缓存（使用OrderEvent中的座位信息）
+     * 将Lua脚本已锁定的座位恢复为可售状态
+     *
+     * @param orderEvent 订单创建事件
+     */
+    private void clearRedisSeatCacheByEvent(OrderCreateEvent orderEvent) {
+        try {
+            Long showEventId = orderEvent.getShowEventId();
+            Long orderId = orderEvent.getOrderId();
+
+            // 从orderEvent中获取座位信息
+            List<OrderCreateEvent.SeatInfo> seatInfos = orderEvent.getSeats();
+            if (seatInfos == null || seatInfos.isEmpty()) {
+                log.warn("【Redis缓存清理】订单事件中没有座位信息: orderId={}", orderId);
+                return;
+            }
+
+            // 查询座位详细信息（需要seat_zone、seat_row、seat_number）
+            List<Long> seatIds = seatInfos.stream()
+                    .map(OrderCreateEvent.SeatInfo::getSeatId)
+                    .collect(java.util.stream.Collectors.toList());
+
+            List<SeatCacheDTO> seats =
+                    seatMapper.selectByEventIdAndSeatIds(showEventId, seatIds);
+
+            if (seats.isEmpty()) {
+                log.warn("【Redis缓存清理】未找到座位信息: orderId={}, seatIds={}", orderId, seatIds);
+                return;
+            }
+
+            // 按分区分组
+            Map<String, List<SeatCacheDTO>> seatsByZone = seats.stream()
+                            .collect(java.util.stream.Collectors.groupingBy(
+                                    SeatCacheDTO::getSeatZone
+                            ));
+
+            // 更新Redis缓存：将座位状态从"1"（已锁定）恢复为"0"（可售）
+            int totalUpdated = 0;
+            for (Map.Entry<String, List<SeatCacheDTO>> entry : seatsByZone.entrySet()) {
+                String zone = entry.getKey();
+                List<SeatCacheDTO> zoneSeats = entry.getValue();
+
+                String hashKey = TicketRedisKey.SEAT_STOCK_PREFIX + showEventId + ":" + zone;
+
+                // 批量更新Hash Field
+                for (SeatCacheDTO seat : zoneSeats) {
+                    String field = seat.getSeatKey(); // "row_col" 格式
+                    stringRedisTemplate.opsForHash().put(hashKey, field, SeatStatus.CACHE_AVAILABLE); // "0"
+                    totalUpdated++;
+                }
+            }
+
+            log.info("【Redis缓存清理】orderId={}, showEventId={}, 恢复座位数={}, zones={}",
+                    orderId, showEventId, totalUpdated, seatsByZone.keySet());
+
+        } catch (Exception e) {
+            // Redis缓存清理失败不影响回滚主流程，只记录错误
+            log.error("【Redis缓存清理失败】orderId={}, error={}",
+                    orderEvent.getOrderId(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 清理Redis座位缓存
+     * 将Lua脚本已锁定的座位恢复为可售状态
+     *
+     * @param order 订单实体
+     */
+    /**
+     * 清理用户防重key
+     * 删除Lua脚本设置的防重key，允许用户重新下单
+     *
+     * @param userId 用户ID
+     * @param showEventId 演出活动ID
+     */
+    private void clearUserAntiDuplicateKey(Long userId, Long showEventId) {
+        try {
+            // Lua脚本中的key格式：seckill:user:{userId}:activity:{activityId}
+            String antiDuplicateKey = "seckill:user:" + userId + ":activity:" + showEventId;
+            Boolean deleted = stringRedisTemplate.delete(antiDuplicateKey);
+
+            if (deleted) {
+                log.info("【用户防重key清理】userId={}, showEventId={}, key已删除", userId, showEventId);
+            } else {
+                log.warn("【用户防重key清理】userId={}, showEventId={}, key不存在或删除失败", userId, showEventId);
+            }
+
+        } catch (Exception e) {
+            log.error("【用户防重key清理失败】userId={}, showEventId={}, error={}",
+                    userId, showEventId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 从延迟队列移除订单
+     * 避免订单超时处理重复执行
+     *
+     * @param orderId 订单ID
+     */
+    private void removeOrderFromDelayQueue(Long orderId) {
+        try {
+            boolean removed = orderTimeoutHandler.removeOrderFromDelayQueue(orderId);
+            if (removed) {
+                log.info("【延迟队列移除】orderId={}, 已从延迟队列移除", orderId);
+            } else {
+                log.warn("【延迟队列移除】orderId={}, 移除失败（可能已超时或不存在）", orderId);
+            }
+
+        } catch (Exception e) {
+            log.error("【延迟队列移除失败】orderId={}, error={}", orderId, e.getMessage(), e);
         }
     }
 }

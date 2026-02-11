@@ -49,3 +49,8 @@ end
 redis.call("sadd", orderKey, userId)
 
 return 0 -- 秒杀成功
+
+--Lua引入的原因：
+--原子性：避免“查-改”之间的并发问题（ABA 问题）
+--高性能：脚本在 Redis 内部执行，无网络往返
+--一致性：即使 Redis 主从切换，单实例内操作仍安全

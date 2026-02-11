@@ -26,21 +26,25 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 订单超时处理器
+ * 订单超时处理器（旧方案 - 已废弃）
  * 使用 Redis ZSet 延迟队列 + 定时任务扫描超时订单
  *
- * 工作原理：
- * 1. 订单创建时，将 orderId 加入 Redis ZSet，score 为订单过期时间戳
- * 2. 定时任务每10秒扫描一次延迟队列
- * 3. 取出当前时间之前的所有订单（已过期）
- * 4. 检查订单状态，如果仍是 PENDING，则取消订单并释放座位
+ * ⚠️ 已废弃：请使用 OrderTimeoutHandler（Redisson RDelayedQueue 方案）
  *
+ * 问题：
+ * 1. 需要定时任务扫描，实时性差
+ * 2. 没有分布式锁，多实例会重复处理同一订单
+ * 3. 需要手动管理 ZSet，容易出错
+ *
+ * @deprecated 使用 OrderTimeoutHandler 替代
+ * @see com.example.yoyo_data.infrastructure.scheduler.OrderTimeoutHandler
  * @author YoYo Data Team
  * @version 1.0
  * @since 2026-02-09
  */
 @Slf4j
-@Component
+// @Component // 已禁用：使用 OrderTimeoutHandler 替代
+@Deprecated
 public class OrderTimeoutScheduler {
 
     @Autowired
@@ -69,9 +73,11 @@ public class OrderTimeoutScheduler {
 
     /**
      * 定时扫描延迟队列，处理超时订单
-     * 每10秒执行一次
+     * 每30秒执行一次
+     * @deprecated 已废弃
      */
-    @Scheduled(fixedDelay = 3600000, initialDelay = 5000)
+    // @Scheduled(fixedDelay = 1800000, initialDelay = 5000) // 已禁用：使用 OrderTimeoutHandler 替代
+    @Deprecated
     public void scanExpiredOrders() {
         try {
             String delayQueueKey = TicketRedisKey.ORDER_DELAY_QUEUE;

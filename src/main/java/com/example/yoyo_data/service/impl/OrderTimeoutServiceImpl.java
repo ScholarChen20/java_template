@@ -24,11 +24,22 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 订单超时处理服务实现类
+ * 订单超时处理服务实现类（旧方案 - 已废弃）
  * 定时任务：每分钟执行一次，处理过期订单和座位
+ *
+ * ⚠️ 已废弃：请使用 OrderTimeoutHandler（Redisson RDelayedQueue 方案）
+ *
+ * 问题：
+ * 1. 每分钟扫描数据库，性能差，数据库压力大
+ * 2. 没有分布式锁，多实例会重复处理同一订单
+ * 3. 扫描间隔固定，实时性差
+ *
+ * @deprecated 使用 OrderTimeoutHandler 替代
+ * @see com.example.yoyo_data.infrastructure.scheduler.OrderTimeoutHandler
  */
 @Slf4j
-@Service
+// @Service // 已禁用：使用 OrderTimeoutHandler 替代
+@Deprecated
 public class OrderTimeoutServiceImpl implements OrderTimeoutService {
 
     @Autowired
@@ -55,10 +66,12 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
     /**
      * 定时任务：处理过期订单
      * 每分钟执行一次
+     * @deprecated 已废弃
      */
     @Override
-    @Scheduled(cron = "0 * * * * ?") // 每分钟执行
+    // @Scheduled(cron = "0 * * * * ?") // 已禁用：使用 OrderTimeoutHandler 替代
     @Transactional(rollbackFor = Exception.class)
+    @Deprecated
     public int handleExpiredOrders() {
         try {
             LocalDateTime now = LocalDateTime.now();
@@ -142,9 +155,11 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
      * 定时任务：处理过期的锁定座位
      * 每分钟执行一次
      * 作为兜底策略，防止订单表更新失败导致座位永久锁定
+     * @deprecated 已废弃
      */
     @Override
-    @Scheduled(cron = "0 * * * * ?") // 每分钟执行
+    // @Scheduled(cron = "0 * * * * ?") // 已禁用：使用 OrderTimeoutHandler 替代
+    @Deprecated
     public int handleExpiredSeats() {
         try {
             LocalDateTime now = LocalDateTime.now();

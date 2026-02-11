@@ -1,8 +1,6 @@
-package com.example.yoyo_data.infrastructure.message.travelplan;
+package com.example.yoyo_data.infrastructure.message;
 
-import com.example.yoyo_data.infrastructure.message.MessageEvent;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;

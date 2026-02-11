@@ -33,7 +33,7 @@ public interface TicketService {
      * @param token JWT token
      * @return 取消结果
      */
-    Result<Void> cancelOrder(Long orderId, String token);
+    Result<String> cancelOrder(Long orderId, String token);
 
     /**
      * 查询订单详情

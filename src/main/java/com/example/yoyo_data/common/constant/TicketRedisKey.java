@@ -37,8 +37,16 @@ public class TicketRedisKey {
 
     /**
      * 订单延迟队列：ticket:order:delay:queue（使用 ZSet 实现）
+     * @deprecated 已废弃，请使用 ORDER_TIMEOUT_QUEUE（Redisson RDelayedQueue）
      */
+    @Deprecated
     public static final String ORDER_DELAY_QUEUE = "ticket:order:delay:queue";
+
+    /**
+     * 订单超时队列：ticket:order:timeout:queue（使用 Redisson RDelayedQueue）
+     * 分布式延迟队列，自动处理超时订单，防止重复消费
+     */
+    public static final String ORDER_TIMEOUT_QUEUE = "ticket:order:timeout:queue";
 
     /**
      * 演出提醒状态记录前缀：ticket:show:remind:{showEventId}:{reminderType}
@@ -51,10 +59,12 @@ public class TicketRedisKey {
      * 订单缓存前缀：ticket_order:{orderId}
      */
     public static final String TICKET_ORDER_PREFIX = "ticket_order";
+
     /**
      * 临时座位缓存前缀：tmp:seats:{showEventId}
      */
     public static final String TMP_SEATS_PREFIX = "tmp:seats:";
+
 
 
     /**
