@@ -1927,8 +1927,8 @@ wrk.body = '{"showEventId":1,"seatIds":[' .. math.random(1, 8000) .. '],"contact
 
 #### 1.1 用户注册登录流程
 ```
-1. 调用 POST /api/user/register 注册
-2. 调用 POST /api/user/login 登录，获取 token
+1. 调用 POST /api/auth/register 注册
+2. 调用 POST /api/auth/login 登录，获取 token
 3. 后续请求携带 token 访问需要认证的接口
 ```
 
