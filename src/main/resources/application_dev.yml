@@ -34,6 +34,7 @@ mybatis-plus:
 
 logging:
   level:
+    org.apach.kafka: DEBUG
     root: INFO
     com.example.yoyo_data: DEBUG
   pattern:
@@ -49,7 +50,7 @@ sls-log:
 kafka:
   bootstrap-servers: localhost:9092
   producer:
-    retries: 3  # 重试次数
+#    retries: 3  # 重试次数
     acks: all   # acks
     batch-size: 16384
     properties.linger.ms: 0

@@ -93,6 +93,11 @@ public class TicketOrderVO {
     private String contactPhone;
 
     /**
+     * 订单二维码URL（支付成功后异步生成，用于入场扫码验证）
+     */
+    private String qrCodeUrl;
+
+    /**
      * 座位列表
      */
     private List<SeatVO> seats;

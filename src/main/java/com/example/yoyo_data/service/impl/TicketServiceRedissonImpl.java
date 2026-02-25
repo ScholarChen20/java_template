@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.constant.*;
 import com.example.yoyo_data.common.dto.*;
+import com.example.yoyo_data.common.dto.request.QuickGrabRequest;
 import com.example.yoyo_data.common.entity.*;
 import com.example.yoyo_data.common.vo.SeatVO;
 import com.example.yoyo_data.common.vo.TicketOrderVO;
@@ -647,6 +648,55 @@ public class TicketServiceRedissonImpl implements TicketService {
     }
 
     /**
+     * 查看我的电子票（票夹）
+     *
+     * 只返回 PAID（已支付）状态的订单，并包含二维码入场码 URL，
+     * 对应大麦网"我的票夹"功能。
+     *
+     * @param token JWT 认证 token
+     * @param page  页码
+     * @param size  每页大小
+     * @return 电子票列表（含二维码URL）
+     */
+    @Override
+    public Result<Page<TicketOrderVO>> getMyTickets(String token, Integer page, Integer size) {
+        if (token == null || !jwtUtils.validateToken(token)) {
+            log.warn("查询电子票请求失败: Token无效或已过期");
+            return Result.unauthorized(TicketStatus.TOKEN_INVALID);
+        }
+        Long userId = jwtUtils.getUserIdFromToken(token);
+
+        try {
+            Page<TicketOrder> pageParam = new Page<>(page, size);
+            LambdaQueryWrapper<TicketOrder> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(TicketOrder::getUserId, userId)
+                    .eq(TicketOrder::getStatus, OrderStatus.PAID) // 只查已支付订单
+                    .orderByDesc(TicketOrder::getPayTime);        // 按支付时间倒序
+
+            Page<TicketOrder> orderPage = ticketOrderMapper.selectPage(pageParam, queryWrapper);
+
+            Page<TicketOrderVO> voPage = new Page<>(orderPage.getCurrent(), orderPage.getSize(), orderPage.getTotal());
+            List<TicketOrderVO> voList = orderPage.getRecords().stream().map(order -> {
+                ShowEvent showEvent = showEventMapper.selectById(order.getShowEventId());
+                List<Long> seatIds = orderSeatMapper.selectIdsByOrderId(order.getId());
+                List<Seat> seats = seatMapper.selectBatchIds(seatIds);
+                return buildOrderVO(order, showEvent, seats);
+            }).collect(Collectors.toList());
+
+            voPage.setRecords(voList);
+
+            log.debug("【查询电子票】userId={}, page={}, size={}, total={}",
+                    userId, page, size, voPage.getTotal());
+
+            return Result.success(voPage);
+
+        } catch (Exception e) {
+            log.error("【查询电子票异常】userId={}, error={}", userId, e.getMessage(), e);
+            return Result.error("查询电子票失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 构建订单VO
      *
      * @param order 订单实体
@@ -943,6 +993,443 @@ public class TicketServiceRedissonImpl implements TicketService {
         luaArgs.add(orderNo);                          // orderId
         log.info("【构建Lua脚本参数】{}", luaArgs);
         return luaArgs;
+    }
+
+    // ========================================================================
+    // ==================== 快速抢票（Quick Grab）实现 ==========================
+    // ========================================================================
+
+    /**
+     * 快速抢票 - 系统自动分配座位
+     *
+     * 与普通抢票的核心差异：
+     *   普通抢票：用户指定具体 seatIds → Lua 原子校验锁定 → 异步 Kafka 写 DB
+     *   快速抢票：系统按区域自动选座（Redis 优先 / DB 兜底，支持连座算法）
+     *            → Lua 原子校验锁定（流程完全复用）→ 异步 Kafka 写 DB
+     *
+     * 座位选取策略（两阶段）：
+     *   Phase 1 - Redis 优先：读取预热的 Hash（ticket:seat:stock:{id}:{zone}），
+     *             value="0" 表示可售，应用连座算法后获得候选 (row,col) 列表，
+     *             再回查 DB 获取完整 Seat 实体。
+     *   Phase 2 - DB 兜底：Redis 缓存未命中时（开票早期未完成预热），
+     *             直接按 (show_event_id, zone, status=AVAILABLE) 查 DB，
+     *             在内存中执行连座算法。
+     *
+     * 之后流程与普通抢票完全一致：
+     *   Lua 原子锁（防并发双锁） → 创建订单 → 事务后 Kafka → Redisson 延迟队列
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result<TicketOrderVO> quickGrabTicket(QuickGrabRequest request, String token) {
+
+        // ========== 第一步：Token 验证 ==========
+        if (token == null || !jwtUtils.validateToken(token)) {
+            log.warn("【快速抢票失败】Token无效或已过期");
+            return Result.unauthorized(TicketStatus.TOKEN_INVALID);
+        }
+        Long userId = jwtUtils.getUserIdFromToken(token);
+        log.info("【快速抢票请求】userId={}, showEventId={}, zone={}, seatCount={}, preferContinuous={}",
+                userId, request.getShowEventId(), request.getSeatZone(),
+                request.getSeatCount(), request.getPreferContinuous());
+
+        // ========== 第二步：参数校验 ==========
+        if (request.getTicketUsers() == null
+                || request.getTicketUsers().size() != request.getSeatCount()) {
+            return Result.error("观影人数量必须与购票数量一致");
+        }
+
+        // ========== 第三步：演出活动状态校验 ==========
+        ShowEvent showEvent = showEventMapper.selectById(request.getShowEventId());
+        if (showEvent == null) {
+            return Result.error(TicketStatus.NOT_EXIST);
+        }
+        if (!ShowEventStatus.SELLING.equals(showEvent.getStatus())) {
+            return Result.error(TicketStatus.NOT_START);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(showEvent.getSaleStartTime())) {
+            return Result.error(TicketStatus.NOT_SELLING);
+        }
+        if (now.isAfter(showEvent.getSaleEndTime())) {
+            return Result.error(TicketStatus.SELLING_END);
+        }
+        // 快速预检：剩余可售座位是否足够
+        if (showEvent.getAvailableSeats() < request.getSeatCount()) {
+            log.warn("【快速抢票失败】演出可售座位不足: availableSeats={}, seatCount={}",
+                    showEvent.getAvailableSeats(), request.getSeatCount());
+            return Result.error(TicketStatus.SEAT_LOCKED_OR_SOLD);
+        }
+
+        // ========== 第四步：用户限购预检（乐观，不加锁） ==========
+        {
+            LambdaQueryWrapper<UserTicketRecord> limitQ = new LambdaQueryWrapper<>();
+            limitQ.eq(UserTicketRecord::getUserId, userId)
+                  .eq(UserTicketRecord::getShowEventId, request.getShowEventId());
+            UserTicketRecord record = userTicketRecordMapper.selectOne(limitQ);
+            int purchased = (record == null) ? 0 : record.getTicketCount();
+            if (purchased + request.getSeatCount() > showEvent.getMaxBuyLimit()) {
+                log.warn("【快速抢票失败】超出限购: 已购={}, 本次={}, 限额={}",
+                        purchased, request.getSeatCount(), showEvent.getMaxBuyLimit());
+                return Result.error("超过限购数量，每人最多购买 " + showEvent.getMaxBuyLimit() + " 张");
+            }
+        }
+
+        // ========== 第五步：获取 Redisson 分布式锁（防同一用户重复提交） ==========
+        String lockKey = TicketRedisKey.GRAB_LOCK_PREFIX + userId + ":" + request.getShowEventId();
+        RLock lock = redissonClient.getLock(lockKey);
+        long lockStartTime = System.currentTimeMillis();
+
+        try {
+            boolean locked = lock.tryLock(3, 30, TimeUnit.SECONDS);
+            if (!locked) {
+                log.warn("【快速抢票失败】获取锁超时: userId={}, showEventId={}", userId, request.getShowEventId());
+                return Result.error(TicketStatus.REPEAT_REQUEST);
+            }
+
+            // ========== 第六步：自动选座（Redis 优先 / DB 兜底） ==========
+            List<Seat> seats = selectSeatsForQuickGrab(
+                    request.getShowEventId(),
+                    request.getSeatZone(),
+                    request.getSeatCount(),
+                    Boolean.TRUE.equals(request.getPreferContinuous())
+            );
+
+            if (seats.isEmpty()) {
+                log.warn("【快速抢票失败】区域无可售座位: zone={}, showEventId={}",
+                        request.getSeatZone(), request.getShowEventId());
+                return Result.error("【" + request.getSeatZone() + "区】暂无可售座位，请选择其他区域");
+            }
+            if (seats.size() < request.getSeatCount()) {
+                log.warn("【快速抢票失败】区域座位不足: zone={}, available={}, required={}",
+                        request.getSeatZone(), seats.size(), request.getSeatCount());
+                return Result.error("【" + request.getSeatZone() + "区】可售座位不足，请减少购票数量或选择其他区域");
+            }
+
+            log.info("【快速抢票-选座完成】userId={}, zone={}, seats={}",
+                    userId, request.getSeatZone(),
+                    seats.stream().map(s -> s.getSeatRow() + "_" + s.getSeatNumber())
+                            .collect(Collectors.toList()));
+
+            // ========== 第七步：Lua 脚本原子校验 + 锁定 Redis 缓存 ==========
+            String orderNo = String.valueOf(redisIdWorker.nextId(TicketRedisKey.TICKET_ORDER_PREFIX));
+            List<String> luaArgs = buildQuickGrabLuaArgs(request.getShowEventId(), seats, userId, orderNo);
+
+            Long luaResult = stringRedisTemplate.execute(
+                    SECKILL_SCRIPT,
+                    Collections.emptyList(),
+                    luaArgs.toArray(new String[0])
+            );
+            log.info("【快速抢票-Lua结果】luaResult={}", luaResult);
+
+            if (luaResult != null && luaResult != 0) {
+                // 1 = 座位已被抢，2 = 重复下单
+                String errMsg = luaResult == 2 ? TicketStatus.REPEAT_ORDER : TicketStatus.SEAT_LOCKED_OR_SOLD;
+                log.warn("【快速抢票失败】Lua校验不通过: luaResult={}, userId={}", luaResult, userId);
+                return Result.error(errMsg);
+            }
+
+            // ========== 第八步：创建订单（DB） ==========
+            BigDecimal totalAmount = seats.stream()
+                    .map(Seat::getPrice)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            QuickGrabRequest.TicketUser primaryUser = request.getTicketUsers().get(0);
+            TicketOrder order = TicketOrder.builder()
+                    .orderNo(orderNo)
+                    .showEventId(request.getShowEventId())
+                    .userId(userId)
+                    .seatCount(seats.size())
+                    .totalAmount(totalAmount)
+                    .status(OrderStatus.PENDING)
+                    .expireTime(now.plusMinutes(15))
+                    .contactName(primaryUser.getContactName())
+                    .contactPhone(primaryUser.getContactPhone())
+                    .contactIdCard(primaryUser.getContactIdCard())
+                    .build();
+
+            ticketOrderMapper.insert(order);
+            log.info("【快速抢票-订单创建】orderNo={}, orderId={}, totalAmount={}",
+                    orderNo, order.getId(), totalAmount);
+
+            // ========== 第九步：事务提交后异步发 Kafka + 加入延迟队列 ==========
+            OrderCreateEvent orderCreateEvent = buildOrderCreateEventForQuickGrab(order, seats, request, showEvent);
+            Long orderId = order.getId();
+
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        sendOrderCreateEvent(orderCreateEvent);
+                        orderTimeoutHandler.addOrderToDelayQueue(orderId, 15);
+                        log.info("【快速抢票-事务后处理完成】orderId={}, orderNo={}", orderId, orderNo);
+                    } catch (Exception e) {
+                        log.error("【快速抢票-事务后处理失败】orderId={}, error={}", orderId, e.getMessage(), e);
+                    }
+                }
+            });
+
+            // ========== 第十步：返回结果 ==========
+            TicketOrderVO vo = buildOrderVO(order, showEvent, seats);
+            long totalTime = System.currentTimeMillis() - lockStartTime;
+            log.info("【快速抢票成功】userId={}, orderId={}, zone={}, seatCount={}, totalAmount={}, 耗时={}ms",
+                    userId, orderId, request.getSeatZone(), seats.size(), totalAmount, totalTime);
+            return Result.success(vo);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("【快速抢票中断】userId={}, showEventId={}", userId, request.getShowEventId(), e);
+            return Result.error("抢票被中断，请重试");
+        } catch (Exception e) {
+            log.error("【快速抢票异常】userId={}, showEventId={}, error={}",
+                    userId, request.getShowEventId(), e.getMessage(), e);
+            return Result.error("快速抢票失败: " + e.getMessage());
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                try {
+                    lock.unlock();
+                } catch (IllegalMonitorStateException e) {
+                    log.warn("【快速抢票-锁释放警告】userId={}", userId);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 快速抢票 - 选座核心：Redis 优先 / DB 兜底
+    // ------------------------------------------------------------------
+
+    /**
+     * 自动选座入口：先尝试读 Redis 预热缓存，缓存为空则降级到 DB 查询。
+     */
+    private List<Seat> selectSeatsForQuickGrab(Long showEventId, String zone,
+                                                int count, boolean preferContinuous) {
+        String hashKey = TicketRedisKey.SEAT_STOCK_PREFIX + showEventId + ":" + zone;
+        Map<Object, Object> hashEntries = stringRedisTemplate.opsForHash().entries(hashKey);
+
+        if (!hashEntries.isEmpty()) {
+            log.debug("【快速选座-Redis】zone={}, cacheSize={}", zone, hashEntries.size());
+            return selectSeatsFromRedis(showEventId, zone, count, preferContinuous, hashEntries);
+        }
+
+        log.debug("【快速选座-DB兜底】zone={}", zone);
+        return selectSeatsFromDB(showEventId, zone, count, preferContinuous);
+    }
+
+    /**
+     * Redis 路径：从预热 Hash 中筛选 value="0"（可售）的座位，
+     * 应用连座算法，再回查 DB 获取完整 Seat 实体。
+     *
+     * Redis Hash 结构：
+     *   Key   = ticket:seat:stock:{showEventId}:{zone}
+     *   Field = "{row}_{col}"  e.g. "3_7"
+     *   Value = "0"(可售) | "1"(锁定) | "2"(已售)
+     */
+    private List<Seat> selectSeatsFromRedis(Long showEventId, String zone, int count,
+                                             boolean preferContinuous,
+                                             Map<Object, Object> hashEntries) {
+        // 1. 解析可售座位列表 [row, col]
+        List<int[]> available = new ArrayList<>();
+        for (Map.Entry<Object, Object> entry : hashEntries.entrySet()) {
+            if (SeatStatus.CACHE_AVAILABLE.equals(entry.getValue())) {
+                String[] parts = entry.getKey().toString().split("_");
+                if (parts.length == 2) {
+                    try {
+                        available.add(new int[]{
+                                Integer.parseInt(parts[0]),
+                                Integer.parseInt(parts[1])
+                        });
+                    } catch (NumberFormatException ignored) { /* 忽略格式异常 */ }
+                }
+            }
+        }
+
+        if (available.size() < count) {
+            log.warn("【快速选座-Redis】可售座位不足: available={}, required={}", available.size(), count);
+            return Collections.emptyList();
+        }
+
+        // 2. 按 (row, col) 升序排列，方便连座检测
+        available.sort((a, b) -> a[0] != b[0] ? Integer.compare(a[0], b[0]) : Integer.compare(a[1], b[1]));
+
+        // 3. 连座优先 / 随意选座
+        List<int[]> selected;
+        if (preferContinuous) {
+            selected = findConsecutiveSeats(available, count);
+            if (selected.isEmpty()) {
+                log.debug("【快速选座-Redis】未找到连座，降级为随意选座");
+                selected = available.subList(0, count);
+            }
+        } else {
+            selected = available.subList(0, count);
+        }
+
+        // 4. 回查 DB 获取完整 Seat 实体（含 seatId/version/price）
+        return fetchSeatEntitiesByRowCols(showEventId, zone, selected);
+    }
+
+    /**
+     * DB 兜底路径：直接按区域查可售座位，在内存中执行连座算法。
+     * 用于 Redis 预热缓存尚未就绪（演出早期）的场景。
+     */
+    private List<Seat> selectSeatsFromDB(Long showEventId, String zone,
+                                          int count, boolean preferContinuous) {
+        // 多拉一些候选，保证连座算法有足够素材（最少 count*5，至少 20 条）
+        int fetchLimit = Math.max(count * 5, 20);
+        List<Seat> candidates = seatMapper.selectAvailableByZone(showEventId, zone, fetchLimit);
+
+        if (candidates.isEmpty()) return Collections.emptyList();
+        if (candidates.size() <= count) return candidates;  // 候选数恰好够用，直接返回
+
+        if (!preferContinuous) {
+            return candidates.subList(0, count);
+        }
+
+        // 连座算法：candidates 已按 (seat_row, seat_number) 升序
+        List<int[]> rowCols = candidates.stream()
+                .map(s -> new int[]{s.getSeatRow(), s.getSeatNumber()})
+                .collect(Collectors.toList());
+
+        List<int[]> consecutive = findConsecutiveSeats(rowCols, count);
+        if (consecutive.isEmpty()) {
+            // 无连座，降级
+            log.debug("【快速选座-DB】未找到连座，降级为随意选座");
+            return candidates.subList(0, count);
+        }
+
+        // 按 row_col 反查对应的 Seat 实体
+        Set<String> selectedKeys = consecutive.stream()
+                .map(rc -> rc[0] + "_" + rc[1])
+                .collect(Collectors.toSet());
+        return candidates.stream()
+                .filter(s -> selectedKeys.contains(s.getSeatRow() + "_" + s.getSeatNumber()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 连座查找算法：在有序 [row,col] 列表中找第一段满足 count 个连续座位号的组合。
+     * 要求同一排（row 相同）且座位号连续（col 差值为 1）。
+     *
+     * @param sorted 已按 (row, col) 升序排列的座位列表
+     * @param count  需要的连座数量
+     * @return 找到则返回连座列表，否则返回空列表
+     */
+    private List<int[]> findConsecutiveSeats(List<int[]> sorted, int count) {
+        // 按排号分组
+        Map<Integer, List<Integer>> byRow = new TreeMap<>();
+        for (int[] seat : sorted) {
+            byRow.computeIfAbsent(seat[0], k -> new ArrayList<>()).add(seat[1]);
+        }
+
+        for (Map.Entry<Integer, List<Integer>> entry : byRow.entrySet()) {
+            int row = entry.getKey();
+            List<Integer> cols = entry.getValue(); // 已升序
+            for (int i = 0; i <= cols.size() - count; i++) {
+                boolean isConsecutive = true;
+                for (int j = 1; j < count; j++) {
+                    if (cols.get(i + j) != cols.get(i + j - 1) + 1) {
+                        isConsecutive = false;
+                        break;
+                    }
+                }
+                if (isConsecutive) {
+                    List<int[]> result = new ArrayList<>();
+                    for (int j = 0; j < count; j++) {
+                        result.add(new int[]{row, cols.get(i + j)});
+                    }
+                    log.debug("【连座找到】row={}, cols={}", row, result.stream()
+                            .map(rc -> rc[1]).collect(Collectors.toList()));
+                    return result;
+                }
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * 根据 (zone, row, col) 列表回查 DB，获取完整 Seat 实体（含 id、price、version）。
+     * max 4 条，允许单条查询。
+     */
+    private List<Seat> fetchSeatEntitiesByRowCols(Long showEventId, String zone, List<int[]> rowCols) {
+        List<Seat> result = new ArrayList<>();
+        for (int[] rc : rowCols) {
+            LambdaQueryWrapper<Seat> q = new LambdaQueryWrapper<>();
+            q.eq(Seat::getShowEventId, showEventId)
+             .eq(Seat::getSeatZone, zone)
+             .eq(Seat::getSeatRow, rc[0])
+             .eq(Seat::getSeatNumber, rc[1])
+             .eq(Seat::getStatus, SeatStatus.AVAILABLE);
+            Seat seat = seatMapper.selectOne(q);
+            if (seat != null) {
+                result.add(seat);
+            }
+        }
+        return result;
+    }
+
+    // ------------------------------------------------------------------
+    // 快速抢票 - 辅助方法
+    // ------------------------------------------------------------------
+
+    /**
+     * 构建 Lua 脚本参数（快速抢票版本，showEventId 直接传入而非从 DTO 取）。
+     */
+    private List<String> buildQuickGrabLuaArgs(Long showEventId, List<Seat> seats,
+                                                Long userId, String orderNo) {
+        List<String> args = new ArrayList<>();
+        args.add(showEventId.toString());
+        args.add(String.valueOf(seats.size()));
+        for (Seat seat : seats) {
+            args.add(seat.getSeatZone());
+            args.add(String.valueOf(seat.getSeatRow()));
+            args.add(String.valueOf(seat.getSeatNumber()));
+        }
+        args.add(userId.toString());
+        args.add(orderNo);
+        log.info("【快速抢票-Lua参数】{}", args);
+        return args;
+    }
+
+    /**
+     * 构建订单创建事件（快速抢票版本）。
+     * 将 {@link QuickGrabRequest.TicketUser} 转换为 {@link OrderCreateEvent.TicketUserInfo}。
+     */
+    private OrderCreateEvent buildOrderCreateEventForQuickGrab(TicketOrder order, List<Seat> seats,
+                                                                QuickGrabRequest request,
+                                                                ShowEvent showEvent) {
+        List<OrderCreateEvent.SeatInfo> seatInfos = seats.stream()
+                .map(seat -> OrderCreateEvent.SeatInfo.builder()
+                        .seatId(seat.getId())
+                        .seatCode(seat.getSeatCode())
+                        .price(seat.getPrice())
+                        .version(seat.getVersion())
+                        .build())
+                .collect(Collectors.toList());
+
+        List<OrderCreateEvent.TicketUserInfo> ticketUserInfos = request.getTicketUsers().stream()
+                .map(u -> OrderCreateEvent.TicketUserInfo.builder()
+                        .contactName(u.getContactName())
+                        .contactPhone(u.getContactPhone())
+                        .contactIdCard(u.getContactIdCard())
+                        .build())
+                .collect(Collectors.toList());
+
+        return OrderCreateEvent.builder()
+                .orderId(order.getId())
+                .orderNo(order.getOrderNo())
+                .showEventId(order.getShowEventId())
+                .userId(order.getUserId())
+                .seatCount(order.getSeatCount())
+                .totalAmount(order.getTotalAmount())
+                .expireTime(order.getExpireTime())
+                .contactName(order.getContactName())
+                .contactPhone(order.getContactPhone())
+                .contactIdCard(order.getContactIdCard())
+                .seatIds(seats.stream().map(Seat::getId).collect(Collectors.toList()))
+                .ticketUsers(ticketUserInfos)
+                .seats(seatInfos)
+                .showEventVersion(showEvent.getVersion())
+                .createdAt(LocalDateTime.now())
+                .build();
     }
 
 }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.dto.GrabTicketDTO;
 import com.example.yoyo_data.common.dto.PayOrderDTO;
+import com.example.yoyo_data.common.dto.request.QuickGrabRequest;
 import com.example.yoyo_data.common.vo.TicketOrderVO;
 import com.example.yoyo_data.service.TicketService;
 import io.swagger.annotations.Api;
@@ -35,7 +36,7 @@ public class TicketController {
      * 可以使用 Guava RateLimiter 或 Redis + Lua 脚本实现限流
      */
     @PostMapping("/grab")
-    @ApiOperation(value = "抢票", notes = "核心抢票接口，支持选座模式和快速抢票模式。需要JWT认证。建议添加限流保护（100 req/s）")
+    @ApiOperation(value = "选座抢票", notes = "指定具体座位号进行抢票。需要JWT认证。建议添加限流保护（100 req/s）")
     public Result<TicketOrderVO> grabTicket(
             @Valid @RequestBody GrabTicketDTO dto,
             HttpServletRequest request
@@ -47,6 +48,33 @@ public class TicketController {
                 dto.getShowEventId(), dto.getSeatIds(), dto.getSeatCount());
 
         return ticketService.grabTicket(dto, token);
+    }
+
+    /**
+     * 快速抢票接口（推荐）
+     *
+     * 对应大麦网"快速购票"模式：
+     *   - 用户只需选择价位区域（如 880元=A区）和购票张数
+     *   - 系统自动从该区域挑选可售座位，支持优先连座分配
+     *   - 演出前一周才会告知具体座位号（保持和真实购票平台一致）
+     *
+     * 适用场景：大型演唱会开票瞬间的高并发抢票
+     * 价位区域示例：VIP=¥1580 / A区=¥880 / B区=¥580 / C区=¥280
+     */
+    @PostMapping("/quick-grab")
+    @ApiOperation(value = "快速抢票（推荐）",
+            notes = "选择价位区域，系统自动分配座位，无需手动选座。支持优先连座。" +
+                    "区域对应票价（示例）：VIP=¥1580, A区=¥880, B区=¥580, C区=¥280。" +
+                    "需要JWT认证。建议在前端加验证码（Step 5/6）。")
+    public Result<TicketOrderVO> quickGrabTicket(
+            @Valid @RequestBody QuickGrabRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        String token = extractToken(httpRequest);
+        log.info("快速抢票请求: showEventId={}, zone={}, seatCount={}, preferContinuous={}",
+                request.getShowEventId(), request.getSeatZone(),
+                request.getSeatCount(), request.getPreferContinuous());
+        return ticketService.quickGrabTicket(request, token);
     }
 
     /**
@@ -117,6 +145,23 @@ public class TicketController {
         log.info("查询我的订单列表: page={}, size={}, status={}", page, size, status);
 
         return ticketService.queryMyOrders(token, page, size, status);
+    }
+
+    /**
+     * 查看我的电子票（票夹）
+     * Step 9：对应大麦网"我的票夹"功能，展示已支付订单的电子票及入场二维码
+     */
+    @GetMapping("/my-tickets")
+    @ApiOperation(value = "查看我的电子票",
+            notes = "查询当前用户所有已支付（PAID）的订单作为电子票展示，包含演出信息、座位信息和入场二维码URL。需要JWT认证。")
+    public Result<Page<TicketOrderVO>> getMyTickets(
+            @ApiParam(value = "页码", defaultValue = "1") @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @ApiParam(value = "每页大小", defaultValue = "10") @RequestParam(value = "size", defaultValue = "10") Integer size,
+            HttpServletRequest request
+    ) {
+        String token = extractToken(request);
+        log.info("查询我的电子票: page={}, size={}", page, size);
+        return ticketService.getMyTickets(token, page, size);
     }
 
     /**
