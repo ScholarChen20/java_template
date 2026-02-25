@@ -3,9 +3,11 @@ package com.example.yoyo_data.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.example.yoyo_data.common.dto.GrabTicketDTO;
+import com.example.yoyo_data.common.dto.request.QuickGrabRequest;
 import com.example.yoyo_data.common.Result;
 import com.example.yoyo_data.common.constant.*;
-import com.example.yoyo_data.common.dto.GrabTicketDTO;
+import com.example.yoyo_data.common.dto.request.QuickGrabRequest;
 import com.example.yoyo_data.common.dto.PayOrderDTO;
 import com.example.yoyo_data.common.entity.*;
 import com.example.yoyo_data.common.vo.SeatVO;
@@ -475,6 +477,17 @@ public class TicketServiceImpl implements TicketService {
         }
     }
 
+    @Override
+    public Result<Page<TicketOrderVO>> getMyTickets(String token, Integer page, Integer size) {
+        // 委托给 queryMyOrders，仅查 PAID 状态（本实现已停用，主实现为 TicketServiceRedissonImpl）
+        return queryMyOrders(token, page, size, "PAID");
+    }
+
+    @Override
+    public Result<TicketOrderVO> quickGrabTicket(QuickGrabRequest request, String token) {
+        // 本实现已停用，主实现为 TicketServiceRedissonImpl
+        return Result.error("请使用 Redisson 实现");
+    }
 
     /**
      * 检查用户限购

@@ -156,4 +156,25 @@ public interface SeatMapper extends BaseMapper<Seat> {
      * @return 座位信息列表
      */
     List<SeatCacheDTO> selectLockedSeatsByOrderId(@Param("orderId") Long orderId);
+
+    /**
+     * 快速抢票：按区域查询可售座位（DB兜底，按行号、座位号升序）
+     * 当 Redis 座位缓存尚未预热时使用，limit 建议传 seatCount * 5 以保证连座算法有足够候选
+     *
+     * @param showEventId 演出活动ID
+     * @param zone        座位区域（如 VIP/A/B/C）
+     * @param limit       最多返回行数
+     * @return 可售座位列表，按 (seat_row, seat_number) 升序排列
+     */
+    @org.apache.ibatis.annotations.Select(
+            "SELECT * FROM tb_seat " +
+            "WHERE show_event_id = #{showEventId} " +
+            "  AND seat_zone = #{zone} " +
+            "  AND status = 'AVAILABLE' " +
+            "ORDER BY seat_row, seat_number " +
+            "LIMIT #{limit}"
+    )
+    List<Seat> selectAvailableByZone(@Param("showEventId") Long showEventId,
+                                     @Param("zone") String zone,
+                                     @Param("limit") Integer limit);
 }

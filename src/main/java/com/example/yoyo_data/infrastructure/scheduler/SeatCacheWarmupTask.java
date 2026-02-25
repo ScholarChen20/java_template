@@ -68,7 +68,7 @@ public class SeatCacheWarmupTask {
      * 定时任务：每10分钟执行一次，预热即将开票的演出座位缓存
      * cron表达式：每10分钟的第0秒执行
      */
-    @Scheduled(cron = "0/10 11,12,13,14,15 * * * ?")
+    @Scheduled(cron = "0/10 11,12,13,14,15,16,17 * * * ?")
     public void warmupSeatCache() {
         try {
             LocalDateTime now = LocalDateTime.now();
