@@ -24,4 +24,19 @@ public class OrderStatus {
      * 超时取消
      */
     public static final String TIMEOUT = "TIMEOUT";
+
+    /**
+     * 退款中
+     */
+    public static final String REFUNDING = "REFUNDING";
+
+    /**
+     * 已退款
+     */
+    public static final String REFUNDED = "REFUNDED";
+
+    /**
+     * 已使用
+     */
+    public static final String USED = "USED";
 }

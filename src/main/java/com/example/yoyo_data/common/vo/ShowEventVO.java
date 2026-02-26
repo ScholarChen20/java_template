@@ -100,4 +100,29 @@ public class ShowEventVO {
      * 最高票价
      */
     private BigDecimal maxPrice;
+
+    /**
+     * 城市
+     */
+    private String city;
+
+    /**
+     * 演出分类
+     */
+    private String category;
+
+    /**
+     * 是否已想看
+     */
+    private Boolean isWished;
+
+    /**
+     * 是否已设置开票提醒
+     */
+    private Boolean isReminded;
+
+    /**
+     * 热度评分
+     */
+    private Integer hotScore;
 }

@@ -9,22 +9,19 @@ import javax.validation.constraints.NotNull;
 
 /**
  * 申请退款请求DTO
- *
- * @author yoyo_data
- * @date 2026-02-25
  */
 @Data
 @ApiModel(description = "申请退款请求")
-public class RefundRequest {
+public class ApplyRefundRequest {
 
     @ApiModelProperty(value = "订单ID", required = true, example = "123456789")
     @NotNull(message = "订单ID不能为空")
     private Long orderId;
 
-    @ApiModelProperty(value = "退款原因", required = true, example = "行程变更")
+    @ApiModelProperty(value = "退款原因", required = true, example = "PERSONAL_REASON")
     @NotBlank(message = "退款原因不能为空")
     private String reason;
 
     @ApiModelProperty(value = "退款说明", example = "临时有事无法参加")
-    private String description;
+    private String remark;
 }

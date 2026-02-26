@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.yoyo_data.infrastructure.repository.ShowEventMapper">
+    <update id="lockSeats">
+        UPDATE
+            tb_show_event
+        SET
+            available_seats = available_seats - #{seatCount},
+            locked_seats = locked_seats + #{seatCount},
+            version = version + 1,
+            updated_at = NOW()
+        WHERE
+            id = #{showEventId}
+            AND available_seats >= #{seatCount}
+            AND version = #{version}
+    </update>
+    <update id="confirmSeats">
+        UPDATE
+            tb_show_event
+        SET
+            locked_seats = locked_seats - #{seatCount},
+            sold_seats = sold_seats + #{seatCount},
+            version = version + 1,
+            updated_at = NOW()
+        WHERE
+            id = #{showEventId}
+          AND locked_seats >= #{seatCount}
+    </update>
+    <update id="releaseSeats">
+        UPDATE
+            tb_show_event
+        SET
+            available_seats = available_seats + #{seatCount},
+            locked_seats = locked_seats - #{seatCount},
+            version = version + 1,
+            updated_at = NOW()
+        WHERE id = #{showEventId}
+          AND locked_seats >= #{seatCount}
+    </update>
+    <select id="selectCityStats" resultType="com.example.yoyo_data.common.vo.CityVO">
+        SELECT
+            city,
+            COUNT(*) as show_count,
+            SUM(CASE WHEN hot_score > 80 THEN 1 ELSE 0 END) as hot_count
+        FROM
+            tb_show_event
+        WHERE
+            city IS NOT NULL
+        GROUP BY
+            city
+        ORDER BY
+            show_count DESC
+    </select>
+    <select id="selectZoneStats" resultType="com.example.yoyo_data.common.dto.ZoneDTO">
+        SELECT
+            seat_zone,
+            COUNT(*) as total_seats,
+            SUM(CASE WHEN status='AVAILABLE' THEN 1 ELSE 0 END) as available_seats,
+            MIN(price) as min_price
+        FROM
+            tb_seat
+        WHERE
+            show_event_id = #{showEventId}
+        GROUP BY
+            seat_zone
+        ORDER BY
+            seat_zone
+    </select>
+</mapper>
