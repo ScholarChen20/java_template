@@ -159,3 +159,158 @@ ALTER TABLE tb_ticket_order
 -- ========================================
 SELECT '✅ 数据库表结构升级完成！' AS message;
 SELECT '✅ tb_order_seat 表已增加观影人信息字段' AS detail;
+
+-- ========================================
+-- 演唱会抢票系统 - 接口优化扩展
+-- 新增7个功能模块：演出搜索、观演人管理、开票提醒与想看、
+-- 退票退款、场馆信息、消息通知中心、演出评价
+-- Author: YoYo Data Team
+-- Date: 2026-02-26
+-- ========================================
+
+-- ========================================
+-- 1. tb_show_event 扩展字段
+-- ========================================
+ALTER TABLE tb_show_event
+    ADD COLUMN city VARCHAR(50) NULL COMMENT '城市' AFTER venue_name,
+    ADD COLUMN category VARCHAR(50) NULL COMMENT '演出分类：CONCERT/DRAMA/MUSICAL/SPORTS/COMEDY/CHILDREN' AFTER city,
+    ADD COLUMN wish_count INT NOT NULL DEFAULT 0 COMMENT '想看人数' AFTER description,
+    ADD COLUMN hot_score INT NOT NULL DEFAULT 0 COMMENT '热度评分' AFTER wish_count;
+
+ALTER TABLE tb_show_event
+    ADD INDEX idx_city_category (city, category),
+    ADD INDEX idx_hot_score (hot_score);
+
+-- ========================================
+-- 2. tb_ticket_order 扩展字段
+-- ========================================
+ALTER TABLE tb_ticket_order
+    ADD COLUMN seat_zone VARCHAR(50) NULL COMMENT '座位区域（冗余字段，便于退款查询）' AFTER remark,
+    ADD COLUMN refund_id BIGINT NULL COMMENT '退款记录ID' AFTER seat_zone;
+
+-- ========================================
+-- 3. 观演人表
+-- ========================================
+DROP TABLE IF EXISTS tb_viewer;
+CREATE TABLE tb_viewer (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '观演人ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    name VARCHAR(100) NOT NULL COMMENT '姓名',
+    id_card VARCHAR(256) NOT NULL COMMENT '身份证号（AES加密存储）',
+    phone VARCHAR(20) NOT NULL COMMENT '手机号',
+    is_default TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否默认观演人',
+    is_verified TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否实名认证',
+    is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_user_idcard (user_id, id_card),
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='观演人信息表';
+
+-- ========================================
+-- 4. 场馆信息表
+-- ========================================
+DROP TABLE IF EXISTS tb_venue;
+CREATE TABLE tb_venue (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '场馆ID',
+    name VARCHAR(200) NOT NULL COMMENT '场馆名称',
+    city VARCHAR(50) NOT NULL COMMENT '城市',
+    district VARCHAR(100) NULL COMMENT '区域',
+    address VARCHAR(500) NOT NULL COMMENT '详细地址',
+    capacity INT NOT NULL DEFAULT 0 COMMENT '总容量',
+    logo_url VARCHAR(500) NULL COMMENT 'Logo图片URL',
+    panorama_url VARCHAR(500) NULL COMMENT '全景图URL',
+    seat_map_url VARCHAR(500) NULL COMMENT '座位图URL',
+    transport_info JSON NULL COMMENT '交通信息（JSON）',
+    amenities JSON NULL COMMENT '设施列表（JSON）',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_city (city)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='场馆信息表';
+
+-- ========================================
+-- 5. 开票提醒表
+-- ========================================
+DROP TABLE IF EXISTS tb_show_remind;
+CREATE TABLE tb_show_remind (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    show_event_id BIGINT NOT NULL COMMENT '演出活动ID',
+    remind_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '提醒状态：PENDING-待提醒, SENT-已发送, EXPIRED-已过期',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY uk_user_show (user_id, show_event_id),
+    INDEX idx_show_event_id (show_event_id),
+    INDEX idx_remind_status (remind_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='开票提醒表';
+
+-- ========================================
+-- 6. 想看（心愿单）表
+-- ========================================
+DROP TABLE IF EXISTS tb_show_wish;
+CREATE TABLE tb_show_wish (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    show_event_id BIGINT NOT NULL COMMENT '演出活动ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY uk_user_show (user_id, show_event_id),
+    INDEX idx_show_event_id (show_event_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演出想看（心愿单）表';
+
+-- ========================================
+-- 7. 退款记录表
+-- ========================================
+DROP TABLE IF EXISTS tb_refund_record;
+CREATE TABLE tb_refund_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '退款记录ID',
+    refund_no VARCHAR(50) NOT NULL COMMENT '退款单号',
+    order_id BIGINT NOT NULL COMMENT '订单ID',
+    order_no VARCHAR(50) NOT NULL COMMENT '订单编号',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    show_event_id BIGINT NOT NULL COMMENT '演出活动ID',
+    original_amount DECIMAL(10,2) NOT NULL COMMENT '原订单金额',
+    handling_fee DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '手续费',
+    refund_amount DECIMAL(10,2) NOT NULL COMMENT '实际退款金额',
+    reason VARCHAR(50) NOT NULL COMMENT '退款原因枚举',
+    remark TEXT NULL COMMENT '退款说明',
+    refund_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '退款状态：PENDING/APPROVED/REFUNDED/REJECTED',
+    pay_type VARCHAR(20) NULL COMMENT '支付方式',
+    transaction_id VARCHAR(100) NULL COMMENT '原支付交易流水号',
+    refund_txn_id VARCHAR(100) NULL COMMENT '退款交易流水号',
+    refund_time DATETIME NULL COMMENT '退款到账时间',
+    apply_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '申请时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_refund_no (refund_no),
+    INDEX idx_order_id (order_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_refund_status (refund_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='退款记录表';
+
+-- ========================================
+-- 8. 演出评价表
+-- ========================================
+DROP TABLE IF EXISTS tb_show_review;
+CREATE TABLE tb_show_review (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '评价ID',
+    show_event_id BIGINT NOT NULL COMMENT '演出活动ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    order_id BIGINT NOT NULL COMMENT '订单ID（需实名购票才可评价）',
+    rating TINYINT NOT NULL COMMENT '评分 1-5',
+    content TEXT NULL COMMENT '评价内容',
+    tags VARCHAR(500) NULL COMMENT '标签（JSON数组）',
+    images VARCHAR(2000) NULL COMMENT '图片URL列表（JSON数组）',
+    seat_info VARCHAR(100) NULL COMMENT '座位信息（如"A区 3排 15号"）',
+    like_count INT NOT NULL DEFAULT 0 COMMENT '点赞数',
+    is_verified_purchase TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否实名购票',
+    is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否删除',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_order_review (order_id),
+    INDEX idx_show_event_id (show_event_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_rating (rating)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演出评价表';
+
+-- ========================================
+-- 接口扩展升级完成
+-- ========================================
+SELECT '✅ 接口扩展数据库升级完成！' AS message;

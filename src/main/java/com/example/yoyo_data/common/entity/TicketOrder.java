@@ -121,6 +121,18 @@ public class TicketOrder implements Serializable {
     private String remark;
 
     /**
+     * 座位区域（冗余字段）
+     */
+    @TableField("seat_zone")
+    private String seatZone;
+
+    /**
+     * 退款记录ID
+     */
+    @TableField("refund_id")
+    private Long refundId;
+
+    /**
      * 创建时间
      */
     @TableField("created_at")

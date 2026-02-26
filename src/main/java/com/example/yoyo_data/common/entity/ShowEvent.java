@@ -55,6 +55,18 @@ public class ShowEvent implements Serializable {
     private String venueName;
 
     /**
+     * 城市
+     */
+    @TableField("city")
+    private String city;
+
+    /**
+     * 演出分类：CONCERT/DRAMA/MUSICAL/SPORTS/COMEDY/CHILDREN
+     */
+    @TableField("category")
+    private String category;
+
+    /**
      * 演出时间
      */
     @TableField("show_time")
@@ -113,6 +125,18 @@ public class ShowEvent implements Serializable {
      */
     @TableField("description")
     private String description;
+
+    /**
+     * 想看人数
+     */
+    @TableField("wish_count")
+    private Integer wishCount;
+
+    /**
+     * 热度评分
+     */
+    @TableField("hot_score")
+    private Integer hotScore;
 
     /**
      * 状态：PENDING-待开票, SELLING-售票中, SOLD_OUT-售罄, ENDED-已结束
