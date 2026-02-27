@@ -22,7 +22,7 @@ public class SeatCacheDTO {
     private String seatKey;
 
     /**
-     * 座位状态：'AVAILABLE' COMMENT '状态：AVAILABLE-可售, LOCKED-已锁定, SOLD-已售出',
+     * 座位状态： AVAILABLE-可售, LOCKED-已锁定, SOLD-已售出',
      */
     private String Status;
 }

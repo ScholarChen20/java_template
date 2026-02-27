@@ -674,6 +674,11 @@ public class TicketServiceRedissonImpl implements TicketService {
                     .orderByDesc(TicketOrder::getPayTime);        // 按支付时间倒序
 
             Page<TicketOrder> orderPage = ticketOrderMapper.selectPage(pageParam, queryWrapper);
+            log.debug("【查询订单】userId={}, page={}, size={}, total={}",
+                    userId, page, size, orderPage.getTotal());
+            if(orderPage.getTotal() == 0){
+                return Result.error("票夹无该用户订单信息显示");
+            }
 
             Page<TicketOrderVO> voPage = new Page<>(orderPage.getCurrent(), orderPage.getSize(), orderPage.getTotal());
             List<TicketOrderVO> voList = orderPage.getRecords().stream().map(order -> {

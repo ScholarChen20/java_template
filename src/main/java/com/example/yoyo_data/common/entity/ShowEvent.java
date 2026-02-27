@@ -70,18 +70,21 @@ public class ShowEvent implements Serializable {
      * 演出时间
      */
     @TableField("show_time")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss" ,timezone = "GMT+8")
     private LocalDateTime showTime;
 
     /**
      * 开票时间
      */
     @TableField("sale_start_time")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss" ,timezone = "GMT+8")
     private LocalDateTime saleStartTime;
 
     /**
      * 结束售票时间
      */
     @TableField("sale_end_time")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss" ,timezone = "GMT+8")
     private LocalDateTime saleEndTime;
 
     /**

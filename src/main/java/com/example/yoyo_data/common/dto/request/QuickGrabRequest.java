@@ -71,8 +71,7 @@ public class QuickGrabRequest {
 
         @ApiModelProperty(value = "观影人身份证号（实名制）", required = true, example = "110101199001011234")
         @NotBlank(message = "观影人身份证不能为空")
-        @Pattern(regexp = "^[1-9]\\d{5}(18|19|20)\\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\\d{3}[0-9Xx]$",
-                message = "身份证号格式不正确")
+        @Pattern(regexp = "^[1-9]\\d{5}(18|19|20)\\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\\d{3}[0-9Xx]$", message = "身份证号格式不正确")
         private String contactIdCard;
     }
 }
