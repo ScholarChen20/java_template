@@ -19,6 +19,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,16 +69,17 @@ public class SeatCacheWarmupTask {
      * 定时任务：每10分钟执行一次，预热即将开票的演出座位缓存
      * cron表达式：每10分钟的第0秒执行
      */
-    @Scheduled(cron = "0 0/10 11,12,13,14,15,16,18 * * ?")
+    @Scheduled(cron = "0 0/10 10,11,12,13,14,15,16,17 * * ?")
     public void warmupSeatCache() {
         try {
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime fiveThirtyMinutesLater = now.plusMinutes(15);
+            String startTime = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            String fiveThirtyMinutesLater = now.plusMinutes(15).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
             // 查询未来15分钟内开票的演出
             LambdaQueryWrapper<ShowEvent> queryWrapper = new LambdaQueryWrapper<>();
             queryWrapper.eq(ShowEvent::getStatus, ShowEventStatus.SELLING)
-                    .between(ShowEvent::getSaleStartTime, now, fiveThirtyMinutesLater);
+                    .between(ShowEvent::getSaleStartTime, startTime, fiveThirtyMinutesLater);
 
             List<ShowEvent> upcomingEvents = showEventMapper.selectList(queryWrapper);
 
