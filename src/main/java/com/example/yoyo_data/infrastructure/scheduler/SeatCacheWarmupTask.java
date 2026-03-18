@@ -69,7 +69,7 @@ public class SeatCacheWarmupTask {
      * 定时任务：每10分钟执行一次，预热即将开票的演出座位缓存
      * cron表达式：每10分钟的第0秒执行
      */
-    @Scheduled(cron = "0 0/10 10,11,12,13,14,15,16,17 * * ?")
+    @Scheduled(cron = "0 0/10 10,11,12,13,14,15,16,17,18 * * ?")
     public void warmupSeatCache() {
         try {
             LocalDateTime now = LocalDateTime.now();
@@ -183,13 +183,13 @@ public class SeatCacheWarmupTask {
     private String mapSeatStatus(String status) {
         switch (status) {
             case SeatStatus.AVAILABLE:
-                return "0";  // 可售
+                return SeatStatus.CACHE_AVAILABLE;  // 可售
             case SeatStatus.LOCKED:
-                return "1";  // 已锁定
+                return SeatStatus.CACHE_LOCKED;  // 已锁定
             case SeatStatus.SOLD:
-                return "2";  // 已售出
+                return SeatStatus.CACHE_SOLD;  // 已售出
             default:
-                return "2";  // 默认为已售出（安全起见）
+                return SeatStatus.CACHE_AVAILABLE;  // 默认为已售出（安全起见）
         }
     }
 

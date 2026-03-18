@@ -8,7 +8,7 @@ public class SeatStatus {
     /**
      * 可售
      */
-    public static final String AVAILABLE = "AVAILABLE";
+    public static final String AVAILABLE = "ALAILABLE";
 
     /**
      * 已锁定
